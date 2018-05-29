@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>THREE - Photogrammetric Camera</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+        <style>
+            #help {
+                text-align:center;
+                margin-top: 50vh;
+                transform: translateY(-50%);
+            }
+            ul {
+                list-style-type: none;
+            }
+            body {
+                background-color: #000000;
+                margin: 0px;
+                overflow: hidden;
+                color: white;
+            }
+        </style>
+    </head>
+    <body>
+        <div id='help'> Drag and drop some Micmac files here :
+            <ul>
+                <li>Orientation*.xml</li>
+                <li>AutoCal*.xml</li>
+                <li>AperiCloud*.ply</li>
+            </ul>
+        </div>
+        <script src="dist/three-photogrammetric-camera.js"></script>
+        <script>
+            var THREE = ThreePhotogrammetricCamera.THREE;
+            var MatisOrientationParser = ThreePhotogrammetricCamera.MatisOrientationParser;
+            var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
+        </script>
+        <script src="js/dat.gui.min.js"></script>
+        <script src="js/PLYLoader.js"></script>
+        <script src="js/OrbitControls.js"></script>
+        <script>
+            var container;
+
+            var camera, orbitCamera, orbitTarget, scene, renderer, plyGroup, cameras, cameraId, texMaterial, wireMaterial, orbitControls;
+            var gui, cameraGUI;
+
+            init();
+            animate();
+
+            function init() {
+
+                container = document.createElement( 'div' );
+                document.body.appendChild( container );
+                scene = new THREE.Scene();
+
+                orbitCamera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 0.1, 1000 );
+                orbitCamera.up = new THREE.Vector3(0, 0, 1);
+                cameras = [orbitCamera];
+                cameraId = 0;
+                camera = orbitCamera;
+
+                // materials
+                wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
+                texMaterial = new THREE.MeshBasicMaterial();
+                var textureLoader = new THREE.TextureLoader();
+                texMaterial.opacity = 0.2;
+                texMaterial.transparent = true;
+                texMaterial.blending = THREE.NormalBlending;
+
+
+                // renderer
+
+                renderer = new THREE.WebGLRenderer( { antialias: true } );
+                renderer.setPixelRatio( window.devicePixelRatio );
+                renderer.setSize( window.innerWidth, window.innerHeight );
+
+                container.appendChild( renderer.domElement );
+
+                // resize
+
+                window.addEventListener( 'resize', onWindowResize, false );
+
+                // controls
+                orbitControls = new THREE.OrbitControls( orbitCamera, renderer.domElement );
+                orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+                orbitControls.dampingFactor = 0.25;
+                orbitControls.screenSpacePanning = false;
+                orbitControls.maxPolarAngle = 0.75 * Math.PI;
+                orbitControls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
+
+                var sum = new THREE.Vector3(0, 0, 0);
+                var Nsum = 0;
+                function updateOrbitTarget(position, delta) {
+                    delta = delta || new THREE.Vector3(10,10,10);
+                    sum.add(position);
+                    Nsum++;
+                    orbitControls.target.copy(sum).divideScalar(Nsum);
+                    orbitControls.object.position.copy(orbitControls.target).add(delta);
+                    orbitControls.saveState();
+                }
+
+
+                /* Ply loading */
+                plyGroup = new THREE.Group();
+                scene.add(plyGroup);
+                var plyParser = new THREE.PLYLoader();
+                var plyMaterial = new THREE.PointsMaterial( { size: 2, vertexColors: THREE.VertexColors, sizeAttenuation: false } );
+                var handlePly = function(name) {
+                    return function(geometry) {
+                        console.log(name);
+                        var points = new THREE.Points( geometry, plyMaterial );
+                        plyGroup.add( points );
+                        geometry.computeBoundingBox();
+                        var center = new THREE.Vector3();
+                        geometry.boundingBox.getCenter(center);
+                        points.updateMatrixWorld(true);
+                        updateOrbitTarget(points.localToWorld(center));
+                    };
+                };
+                var loadPly = function(url) { plyParser.load( url, handlePly(url) ); };
+
+                /* Image loading */
+                function handleImage(name) {
+                    return function(url) {
+                        var texture = textureLoader.load(url);
+                        texture.name = name;
+                        texture.needsUpdate = true;
+                        texMaterial.map = texture;
+                        console.log(name);
+                    };
+                }
+                handleImage('uv')('data/uv.jpg');
+
+                /* Orientation loading */
+                function cameraGroup(camera) {
+                    // create the group (looking at intrinsics only) that should be added to the camera frame.
+                    var group = new THREE.Group();
+
+                    // place a frustum
+                    {
+                        m = new THREE.Matrix4().getInverse(camera.projectionMatrix);
+                        var geometry = new THREE.BufferGeometry();
+                        var vertices = new Float32Array(15);
+                        // get the 4 corners on the near plane (neglecting distortion)
+                        new THREE.Vector3( -1, -1, -1 ).applyMatrix4(m).toArray(vertices,  3);
+                        new THREE.Vector3( -1,  1, -1 ).applyMatrix4(m).toArray(vertices,  6);
+                        new THREE.Vector3(  1,  1, -1 ).applyMatrix4(m).toArray(vertices,  9);
+                        new THREE.Vector3(  1, -1, -1 ).applyMatrix4(m).toArray(vertices, 12);
+                        var uvs = new Float32Array( [-1, -1,  0, 0,  0, 1,  1, 1,  1, 0] );
+                        var indices = [ 0, 1, 2,  0, 2, 3,  0, 3, 4,  0, 4, 1,  1, 3, 2,  1, 4, 3 ];
+                        geometry.setIndex( indices );
+                        geometry.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+                        geometry.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+                        geometry.addGroup(0, 12, 0);
+                        geometry.addGroup(12, 6, 1);
+
+                        var mesh = new THREE.Mesh( geometry, [wireMaterial, texMaterial] );
+                        mesh.scale.set(10, 10, 10);
+                        group.add(mesh);
+                    }
+
+                    // place a sphere at the camera center
+                    {
+                        var geometry = new THREE.SphereBufferGeometry(0.03, 8, 8 );
+                        var material = new THREE.MeshBasicMaterial( {color: 0xffff00} );
+                        group.add(new THREE.Mesh( geometry, material ));
+                    }
+
+                    return group;
+                };
+
+                function handleOrientation(name) {
+                    return function(camera) {
+                        if (!camera) return;
+                        camera.name = name;
+                        var check = '[?]';
+                        if (camera.check) check = camera.check() ? '[Y]' : '[N]';
+                        console.log(check, name, camera);
+                        camera.add(cameraGroup(camera));
+                        camera.zoom = 0.9; // zoom out a bit to see the image borders
+                        scene.add(camera);
+                        cameras.push(camera);
+                        updateOrbitTarget(camera.position);
+                    };
+                }
+
+                function parseOrientation(options) {
+                    var parsers = [MicmacOrientationParser, MatisOrientationParser];
+                    return function(xml) {
+                        for(const parser of parsers) {
+                            var parsed = parser.parse(xml, options);
+                            if (parsed) return parsed;
+                        }
+                        return undefined;
+                    }
+                }
+
+                function loadOrientation(path, name, options = {}) {
+                    if (!options.fetch) {
+                        var fetchOptions = options.fetchOptions || { "crossOrigin" : "anonymous" };
+                        path = path || options.path;
+                        options.fetch = url => fetch(path + url, fetchOptions).then(response => response.text());
+                    }
+                    options.fetch(path + name)
+                        .then(parseOrientation(options))
+                        .then(handleOrientation(name));
+                }
+
+                function loadFileImSel(path, dir, options) {
+                    document.getElementById( 'help' ).style.display = 'none';
+                    options = options || {};
+                    options.fetchOptions = options.fetchOptions || { "crossOrigin" : "anonymous" };
+                    options.fetch = options.fetch || (url => fetch(url, options.fetchOptions).then(response => response.text()));
+                    var url = path+dir+'FileImSel.xml';
+                    options.fetch(url)
+                    .then(function (xml) {
+                        xml = new window.DOMParser().parseFromString(xml, 'text/xml');
+                        var names = Array.from(xml.getElementsByTagName('Name'));
+                        names.forEach(name => loadOrientation(path,dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', options));
+                    });
+                }
+
+                /* Drag and drop events */
+                function addFiles(event) {
+                    var dataTransfer = event.dataTransfer || window.dataTransfer;
+                    event.stopPropagation();
+                    event.preventDefault();
+
+
+                    // iterate over files
+                    var files = dataTransfer.files;
+                    for(var i=0;i<files.length;i++) {
+                        var read = function(file, type) {
+                            return new Promise((resolve, reject) => {
+                                var fr = new FileReader();
+                                fr.onload = () => { resolve(fr.result); };
+                                fr.onerror = () => { fr.abort(); reject(new DOMException('FileReader error.')); };
+                                switch(type) {
+                                    case 'text': fr.readAsText(file); break;
+                                    case 'arrayBuffer': fr.readAsArrayBuffer(file); break;
+                                    case 'dataURL': fr.readAsDataURL(file); break;
+                                    default: console.error('unknown response type', responseType);
+                                }
+                            });
+                        }
+                        var fetch = function(url, type) {
+                            url = url.substr(url.lastIndexOf('/') + 1);
+                            for(file of files) {
+                                if (file.name === url) return read(file, type);
+                            }
+                            return Promise.resolve(undefined);
+                        };
+                        var name = files[i].name;
+                        var ext = name.substr(name.lastIndexOf('.') + 1).toLowerCase();
+                        switch (ext) {
+                            case 'ply':
+                                read(files[i], 'arrayBuffer')
+                                .then(ply => plyParser.parse(ply))
+                                .then(handlePly(name));
+                                break;
+                            case 'xml':
+                                var options = { fetch };
+                                read(files[i], 'text')
+                                .then(parseOrientation(options))
+                                .then(handleOrientation(name));
+                                break;
+                            case 'jpg':
+                                read(files[i], 'dataURL')
+                                .then(handleImage(name));
+                            default:
+                        }
+                    }
+                }
+
+                function prevDefault(event){
+                    document.getElementById( 'help' ).style.display = 'none';
+                    event.preventDefault();
+                }
+                document.addEventListener('dragenter', prevDefault, false);
+                document.addEventListener('dragover', prevDefault, false);
+                document.addEventListener('dragleave', prevDefault, false);
+                document.addEventListener('drop',  addFiles, false);
+                
+                /* Keyboard events */
+                function setCamera(id) {
+                    cameraId = (id + cameras.length) % cameras.length;
+                    camera = cameras[cameraId];
+                    orbitControls.enabled = cameraId === 0;
+                    onWindowResize();
+                    updateGUI();
+                }
+                
+                function keyDown(event) {
+                    switch(event.key) {
+                        case '+': plyMaterial.size++; break;
+                        case '-': plyMaterial.size--; break;
+                        case 'b': setCamera(cameraId - 1);  break;
+                        case 'n': setCamera(cameraId + 1);  break;
+                        case 'c': console.log(camera); break;
+                        case 'p': camera.add(cameraGroup(new THREE.PerspectiveCamera().copy(camera))); break;
+                        default : console.log(event.key);
+                    }
+                }                
+                document.addEventListener('keydown', keyDown, false);
+
+                /* hard-coded loading */
+                // var base = './';
+                // loadPly(base + 'Maurepas/Exterieur/AperiCloud_MEP_Campari_v2.ply');
+                // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E730.CR2.xml');
+                // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E731.CR2.xml');
+                // loadFileImSel(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/');
+                // loadFileImSel(base + 'Maurepas/Interieur/', 'Ori-MEP-Campari/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNE/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
+                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
+            }
+
+            /* GUI */
+            gui = new dat.GUI();
+            var params = {
+                view: {
+                    enabled: false,
+                    offsetX: 0,
+                    offsetY: 0,
+                    width: 1,
+                    height: 1,
+                    fullWidth: 1,
+                    fullHeight: 1,
+                },
+            };
+
+            function updateDisplays(gui) {
+                for (var i in gui.__controllers) {
+                    gui.__controllers[i].updateDisplay();
+                }
+                for (var i in gui.__folders) {
+                    updateDisplays(gui.__folders[i]);
+                }
+            }
+
+            function updateGUI() {
+                params.zoom = camera.zoom;
+                if (camera.view) {
+                    params.view.enabled = camera.view.enabled;
+                    params.view.offsetX = camera.view.offsetX;
+                    params.view.offsetY = camera.view.offsetY;
+                    params.view.width = camera.view.width;
+                    params.view.height = camera.view.height;
+                    params.view.fullWidth = camera.view.fullWidth;
+                    params.view.fullHeight = camera.view.fullHeight;
+                } else {
+                    params.view.enabled = false;
+                    params.view.offsetX = 0;
+                    params.view.offsetY = 0;
+                    params.view.width = 1;
+                    params.view.height = 1;
+                    params.view.fullWidth = 1;
+                    params.view.fullHeight = 1;
+                }
+                updateDisplays(gui);
+            }
+
+            function updateProjectionMatrixGUI() {
+                camera.zoom = params.zoom;
+                if (params.view.enabled) {
+                    if (!camera.view) {
+                        camera.view = {};
+                    }
+                    camera.view.enabled = params.view.enabled;
+                    camera.view.offsetX = params.view.offsetX;
+                    camera.view.offsetY = params.view.offsetY;
+                    camera.view.width = params.view.width;
+                    camera.view.height = params.view.height;
+                    camera.view.fullWidth = params.view.fullWidth;
+                    camera.view.fullHeight = params.view.fullHeight;
+                } else if (camera.view) {
+                    camera.view.enabled = false;
+                }
+                camera.updateProjectionMatrix();
+            }
+
+            updateGUI();
+            gui.add(params, 'zoom', 0, 2).onChange(updateProjectionMatrixGUI);
+            viewGUI = gui.addFolder('View');
+            viewGUI.add(params.view, 'enabled').onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'offsetX').onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'offsetY').onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'width',0).onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'height',0).onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'fullWidth',0).onChange(updateProjectionMatrixGUI);
+            viewGUI.add(params.view, 'fullHeight',0).onChange(updateProjectionMatrixGUI);
+            updateGUI();
+
+            /* callbacks */
+            function onWindowResize() {
+                var width = window.innerWidth;
+                var height = window.innerHeight;
+                renderer.setSize(width, height);
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+            }
+
+            function animate() {
+                orbitControls.update();
+                requestAnimationFrame( animate );
+                render();
+
+            }
+
+            function render() {
+                renderer.render( scene, camera );
+            }
+
+        </script>
+    </body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "three-photogrammetric-camera",
+  "version": "0.1.1",
+  "description": "PhotogrammetricCamera for THREE",
+  "main": "src/main.js",
+  "scripts": {
+    "build": "webpack -p",
+    "start": "webpack-dev-server -d --inline --hot"
+  },
+  "repository": "mbredif/three-photogrammetric-camera",
+  "bugs": "https://github.com/mbredif/three-photogrammetric-camera/issues",
+  "author": "Mathieu Brédif",
+  "license": "(CECILL-B OR MIT)",
+  "devDependencies": {
+    "three": "^0.89.0",
+    "webpack": "^4.1.1",
+    "webpack-cli": "^2.0.15",
+    "webpack-dev-server": "^3.1.1"
+  },
+  "peerDependencies": {
+    "three": "^0.89.0"
+  },
+  "dependencies": {},
+  "directories": {
+    "example": "examples"
+  },
+  "files": [
+    "src",
+    "examples"
+  ]
+}
