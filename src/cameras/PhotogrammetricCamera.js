@@ -1,6 +1,6 @@
-import * as THREE from 'three';
+import {PerspectiveCamera, Vector2, Matrix4} from 'three';
 
-class PhotogrammetricCamera extends THREE.PerspectiveCamera {
+class PhotogrammetricCamera extends PerspectiveCamera {
     /**
      * @Constructor
      * @param {number|Vector2} focal - focal length in pixels (default: equal focal length in x and y)
@@ -13,11 +13,11 @@ class PhotogrammetricCamera extends THREE.PerspectiveCamera {
      * @param {number} aspect - aspect ratio of the camera (default: computed from size).
      */
     constructor(focal, size, point, skew, distos, near, far, aspect) {
-        focal = Array.isArray(focal) ? new THREE.Vector2().fromArray(focal) : (focal || 1024);
-        point = Array.isArray(point) ? new THREE.Vector2().fromArray(point) : point;
-        size = Array.isArray(size) ? new THREE.Vector2().fromArray(size) : (size || 1024);
-        focal = focal.isVector2 ? focal : new THREE.Vector2(focal, focal);
-        size = size.isVector2 ? size : new THREE.Vector2(size, size);
+        focal = Array.isArray(focal) ? new Vector2().fromArray(focal) : (focal || 1024);
+        point = Array.isArray(point) ? new Vector2().fromArray(point) : point;
+        size = Array.isArray(size) ? new Vector2().fromArray(size) : (size || 1024);
+        focal = focal.isVector2 ? focal : new Vector2(focal, focal);
+        size = size.isVector2 ? size : new Vector2(size, size);
         skew = skew || 0;
         point = point || size.clone().multiplyScalar(0.5);
         aspect = aspect || size.x / size.y;
@@ -45,9 +45,9 @@ class PhotogrammetricCamera extends THREE.PerspectiveCamera {
         // filmGauge is only used in compatibility PerspectiveCamera functions
         this.filmOffset = 0;
 
-        this.preProjectionMatrix = new THREE.Matrix4();
-        this.postProjectionMatrix = new THREE.Matrix4();
-        this.textureMatrix = new THREE.Matrix4();
+        this.preProjectionMatrix = new Matrix4();
+        this.postProjectionMatrix = new Matrix4();
+        this.textureMatrix = new Matrix4();
         this.updateProjectionMatrix();
     }
 
@@ -75,14 +75,14 @@ class PhotogrammetricCamera extends THREE.PerspectiveCamera {
             var sx = this.view.fullWidth / this.view.width;
             var sy = this.view.fullHeight / this.view.height;
             textureAspect = this.view.width / this.view.height;
-            this.textureMatrix.premultiply(new THREE.Matrix4().set(
+            this.textureMatrix.premultiply(new Matrix4().set(
                 sx, 0, 0, -sx * this.view.offsetX,
                 0, sy, 0, -sy * this.view.offsetY,
                 0, 0, 1, 0,
                 0, 0, 0, 1));
         }
 
-        var ndcMatrix = new THREE.Matrix4().set(
+        var ndcMatrix = new Matrix4().set(
             2, 0, 0, -1,
             0, -2, 0, 1,
             0, 0, 1, 0,
@@ -91,13 +91,13 @@ class PhotogrammetricCamera extends THREE.PerspectiveCamera {
 
         // take zoom and aspect into account
         var aspectRatio = this.aspect / textureAspect;
-        var zoom = new THREE.Vector2(this.zoom, this.zoom);
+        var zoom = new Vector2(this.zoom, this.zoom);
         if (aspectRatio > 1) {
             zoom.x /= aspectRatio;
         } else {
             zoom.y *= aspectRatio;
         }
-        this.postProjectionMatrix.premultiply(new THREE.Matrix4().makeScale(zoom.x, zoom.y, 1));
+        this.postProjectionMatrix.premultiply(new Matrix4().makeScale(zoom.x, zoom.y, 1));
 
 
         // projectionMatrix is provided as an approximation: its usage neglects the effects of distortions
