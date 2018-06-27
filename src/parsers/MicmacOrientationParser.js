@@ -268,12 +268,11 @@ export default {
     /** Parse an Orientation*.xml from Micmac (see {@link https://github.com/micmacIGN})
      * @function parse
      * @param {string|XMLDocument} xml - the xml content of the orientation file.
-     * @param {Object} options : fetch (fetcher for relative intrinsic files)
+     * @param {Source} source - source function ({@link FilesSource}, {@link FetchSource})
      * @return {Promise} - a promise that resolves with a camera.
      *
      */
-    parse: function parse(xml, options = {}) {
-        options.path = options.path || '';
+    parse: function parse(xml, source) {
         if (!(xml instanceof Node)) {
             xml = new window.DOMParser().parseFromString(xml, 'text/xml');
         }
@@ -284,11 +283,12 @@ export default {
         var file = getText(xml, 'FileInterne');
         var TypeProj = getText(xml, 'TypeProj');
         if (TypeProj !== 'eProjStenope') {
-            throw new Error(`Error parsing micmac orientation : unknown projection type ${TypeProj}`);
+            var error = new Error(`Error parsing micmac orientation : unknown projection type ${TypeProj}`);
+            return Promise.reject(error);
         }
 
         if (file) {
-            return options.fetch(file, 'text').then(intrinsics => parseOrientation(xml, intrinsics));
+            return source.read(file, 'text').then(intrinsics => parseOrientation(xml, intrinsics));
         } else {
             var intrinsics = xml.getElementsByTagName('Interne')[0];
             return Promise.resolve(parseOrientation(xml, intrinsics));

@@ -34,6 +34,8 @@
             var THREE = ThreePhotogrammetricCamera.THREE;
             var MatisOrientationParser = ThreePhotogrammetricCamera.MatisOrientationParser;
             var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
+            var FetchSource = ThreePhotogrammetricCamera.FetchSource;
+            var FilesSource = ThreePhotogrammetricCamera.FilesSource;
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
@@ -43,6 +45,8 @@
 
             var camera, orbitCamera, orbitTarget, scene, renderer, plyGroup, cameras, cameraId, texMaterial, wireMaterial, orbitControls;
             var gui, cameraGUI;
+            var images = {};
+            var scenes;
 
             init();
             animate();
@@ -66,7 +70,8 @@
                 texMaterial.opacity = 0.2;
                 texMaterial.transparent = true;
                 texMaterial.blending = THREE.NormalBlending;
-
+                const uv = textureLoader.load('data/uv.jpg');
+                texMaterial.map = uv;
 
                 // renderer
 
@@ -106,6 +111,7 @@
                 var plyParser = new THREE.PLYLoader();
                 var plyMaterial = new THREE.PointsMaterial( { size: 2, vertexColors: THREE.VertexColors, sizeAttenuation: false } );
                 var handlePly = function(name) {
+                    showHelp(false);
                     return function(geometry) {
                         console.log(name);
                         var points = new THREE.Points( geometry, plyMaterial );
@@ -121,15 +127,20 @@
 
                 /* Image loading */
                 function handleImage(name) {
+                    showHelp(false);
                     return function(url) {
                         var texture = textureLoader.load(url);
+                        images[name] = texture;
                         texture.name = name;
-                        texture.needsUpdate = true;
-                        texMaterial.map = texture;
-                        console.log(name);
+                        cameras.filter(camera => camera.name == name).forEach(camera =>
+                            camera.children[0].texMaterial.map = texture
+                        );
                     };
                 }
-                handleImage('uv')('data/uv.jpg');
+
+                function loadImage(name, url) {
+                    handleImage(name)(url);
+                }
 
                 /* Orientation loading */
                 function cameraGroup(camera) {
@@ -154,7 +165,8 @@
                         geometry.addGroup(0, 12, 0);
                         geometry.addGroup(12, 6, 1);
 
-                        var mesh = new THREE.Mesh( geometry, [wireMaterial, texMaterial] );
+                        group.texMaterial = texMaterial.clone();
+                        var mesh = new THREE.Mesh( geometry, [wireMaterial, group.texMaterial] );
                         mesh.scale.set(10, 10, 10);
                         group.add(mesh);
                     }
@@ -170,6 +182,7 @@
                 };
 
                 function handleOrientation(name) {
+                    showHelp(false);
                     return function(camera) {
                         if (!camera) return;
                         camera.name = name;
@@ -181,106 +194,78 @@
                         scene.add(camera);
                         cameras.push(camera);
                         updateOrbitTarget(camera.position);
+                        return camera;
                     };
                 }
 
-                function parseOrientation(options) {
+                function parseOrientation(source) {
                     var parsers = [MicmacOrientationParser, MatisOrientationParser];
                     return function(xml) {
                         for(const parser of parsers) {
-                            var parsed = parser.parse(xml, options);
+                            var parsed = parser.parse(xml, source);
                             if (parsed) return parsed;
                         }
                         return undefined;
                     }
                 }
 
-                function loadOrientation(path, name, options = {}) {
-                    if (!options.fetch) {
-                        var fetchOptions = options.fetchOptions || { "crossOrigin" : "anonymous" };
-                        path = path || options.path;
-                        options.fetch = url => fetch(path + url, fetchOptions).then(response => response.text());
-                    }
-                    options.fetch(path + name)
-                        .then(parseOrientation(options))
+                function loadOrientation(name, source) {
+                    return source.read(name, 'text')
+                        .then(parseOrientation(source))
                         .then(handleOrientation(name));
                 }
 
-                function loadFileImSel(path, dir, options) {
-                    document.getElementById( 'help' ).style.display = 'none';
-                    options = options || {};
-                    options.fetchOptions = options.fetchOptions || { "crossOrigin" : "anonymous" };
-                    options.fetch = options.fetch || (url => fetch(url, options.fetchOptions).then(response => response.text()));
-                    var url = path+dir+'FileImSel.xml';
-                    options.fetch(url)
-                    .then(function (xml) {
+                function loadFileImSel(dir, source) {
+                    source.read(dir+'FileImSel.xml', 'text').then((xml) => {
                         xml = new window.DOMParser().parseFromString(xml, 'text/xml');
                         var names = Array.from(xml.getElementsByTagName('Name'));
-                        names.forEach(name => loadOrientation(path,dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', options));
+                        names.forEach(name => loadOrientation(dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', source));
                     });
                 }
 
                 /* Drag and drop events */
                 function addFiles(event) {
-                    var dataTransfer = event.dataTransfer || window.dataTransfer;
                     event.stopPropagation();
                     event.preventDefault();
 
-
+                    var files = (event.dataTransfer || window.dataTransfer).files;
+                    var source = new FilesSource(files);
                     // iterate over files
-                    var files = dataTransfer.files;
-                    for(var i=0;i<files.length;i++) {
-                        var read = function(file, type) {
-                            return new Promise((resolve, reject) => {
-                                var fr = new FileReader();
-                                fr.onload = () => { resolve(fr.result); };
-                                fr.onerror = () => { fr.abort(); reject(new DOMException('FileReader error.')); };
-                                switch(type) {
-                                    case 'text': fr.readAsText(file); break;
-                                    case 'arrayBuffer': fr.readAsArrayBuffer(file); break;
-                                    case 'dataURL': fr.readAsDataURL(file); break;
-                                    default: console.error('unknown response type', responseType);
-                                }
-                            });
-                        }
-                        var fetch = function(url, type) {
-                            url = url.substr(url.lastIndexOf('/') + 1);
-                            for(file of files) {
-                                if (file.name === url) return read(file, type);
-                            }
-                            return Promise.resolve(undefined);
-                        };
-                        var name = files[i].name;
+                    for(var i = 0; i < files.length; ++i) {
+                        var file = files[i];
+                        var name = file.name;
                         var ext = name.substr(name.lastIndexOf('.') + 1).toLowerCase();
                         switch (ext) {
                             case 'ply':
-                                read(files[i], 'arrayBuffer')
+                                source.decode(file, 'arrayBuffer')
                                 .then(ply => plyParser.parse(ply))
                                 .then(handlePly(name));
                                 break;
                             case 'xml':
-                                var options = { fetch };
-                                read(files[i], 'text')
-                                .then(parseOrientation(options))
+                                source.decode(file, 'text')
+                                .then(parseOrientation(source))
                                 .then(handleOrientation(name));
                                 break;
                             case 'jpg':
-                                read(files[i], 'dataURL')
+                                source.decode(file, 'dataURL')
                                 .then(handleImage(name));
                             default:
                         }
                     }
                 }
 
+                function showHelp(show) {
+                    document.getElementById( 'help' ).style.display = show ? 'block' : 'none';
+                }
                 function prevDefault(event){
-                    document.getElementById( 'help' ).style.display = 'none';
+                    showHelp(false);
                     event.preventDefault();
                 }
                 document.addEventListener('dragenter', prevDefault, false);
                 document.addEventListener('dragover', prevDefault, false);
                 document.addEventListener('dragleave', prevDefault, false);
                 document.addEventListener('drop',  addFiles, false);
-                
+
                 /* Keyboard events */
                 function setCamera(id) {
                     cameraId = (id + cameras.length) % cameras.length;
@@ -289,7 +274,46 @@
                     onWindowResize();
                     updateGUI();
                 }
-                
+
+                function loadOrientedImage(orientationUrl, imageUrl, source) {
+                  loadOrientation(orientationUrl, source)
+                  .then(camera => loadImage(camera.name, source.path + imageUrl));
+                }
+
+                scenes = {
+                    Abbey: function() {
+                        var path = 'https://raw.githubusercontent.com/micmacIGN/Documentation/master/NEW-DATA/CompensOnLine/';
+                        var source = new FetchSource(path);
+                        loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0204.jpg.xml', 'Abbey-IMG_0204.jpg', source);
+                        loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0205.jpg.xml', 'Abbey-IMG_0205.jpg', source);
+                        loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0206.jpg.xml', 'Abbey-IMG_0206.jpg', source);
+                        loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
+                    },
+                    Maurepas: function() {
+                        // TODO
+                        // loadPly(base + 'Maurepas/Exterieur/AperiCloud_MEP_Campari_v2.ply');
+                        // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E730.CR2.xml');
+                        // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E731.CR2.xml');
+                        // loadFileImSel(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/');
+                        // loadFileImSel(base + 'Maurepas/Interieur/', 'Ori-MEP-Campari/');
+                    },
+                    Chambord: function() {
+                        // TODO
+                        // var source = new FetchSource('Chambord/');
+                        // loadFileImSel('Ori-MEP_FNE/', source);
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
+                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
+                    }
+                }
+
                 function keyDown(event) {
                     switch(event.key) {
                         case '+': plyMaterial.size++; break;
@@ -300,27 +324,8 @@
                         case 'p': camera.add(cameraGroup(new THREE.PerspectiveCamera().copy(camera))); break;
                         default : console.log(event.key);
                     }
-                }                
+                }
                 document.addEventListener('keydown', keyDown, false);
-
-                /* hard-coded loading */
-                // var base = './';
-                // loadPly(base + 'Maurepas/Exterieur/AperiCloud_MEP_Campari_v2.ply');
-                // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E730.CR2.xml');
-                // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E731.CR2.xml');
-                // loadFileImSel(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/');
-                // loadFileImSel(base + 'Maurepas/Interieur/', 'Ori-MEP-Campari/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNE/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
-                // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
             }
 
             /* GUI */
@@ -397,6 +402,8 @@
             viewGUI.add(params.view, 'height',0).onChange(updateProjectionMatrixGUI);
             viewGUI.add(params.view, 'fullWidth',0).onChange(updateProjectionMatrixGUI);
             viewGUI.add(params.view, 'fullHeight',0).onChange(updateProjectionMatrixGUI);
+            scenesGUI = gui.addFolder('Scenes');
+            scenesGUI.add(scenes, 'Abbey');
             updateGUI();
 
             /* callbacks */
