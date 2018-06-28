@@ -32,6 +32,7 @@
         <script src="dist/three-photogrammetric-camera.js"></script>
         <script>
             var THREE = ThreePhotogrammetricCamera.THREE;
+            var PhotogrammetricCamera = ThreePhotogrammetricCamera.PhotogrammetricCamera;
             var MatisOrientationParser = ThreePhotogrammetricCamera.MatisOrientationParser;
             var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
             var FetchSource = ThreePhotogrammetricCamera.FetchSource;
@@ -39,29 +40,31 @@
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
-        <script src="js/OrbitControls.js"></script>
+        <!-- <script src="js/OrbitControls.js"></script> -->
         <script>
-            var container;
-
-            var camera, orbitCamera, orbitTarget, scene, renderer, plyGroup, cameras, cameraId, texMaterial, wireMaterial, orbitControls;
+            var orbitTarget, scene, renderer, plyGroup, cameras, cameraId, texMaterial, wireMaterial, orbitControls;
             var gui, cameraGUI;
             var images = {};
             var scenes;
+            var prevCamera = new PhotogrammetricCamera();
+            var viewCamera = new PhotogrammetricCamera();
+            var nextCamera = null;
+            var duration = 0.5;
 
-            init();
-            animate();
+            /* GUI */
+            gui = new dat.GUI();
+            function updateProjectionMatrixGUI() {
+                viewCamera.updateProjectionMatrix();
+            };
 
             function init() {
 
-                container = document.createElement( 'div' );
+                var container = document.createElement( 'div' );
                 document.body.appendChild( container );
                 scene = new THREE.Scene();
-
-                orbitCamera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 0.1, 1000 );
-                orbitCamera.up = new THREE.Vector3(0, 0, 1);
-                cameras = [orbitCamera];
                 cameraId = 0;
-                camera = orbitCamera;
+                viewCamera.name = 'view';
+                cameras = [];
 
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
@@ -70,29 +73,27 @@
                 texMaterial.opacity = 0.2;
                 texMaterial.transparent = true;
                 texMaterial.blending = THREE.NormalBlending;
-                const uv = textureLoader.load('data/uv.jpg');
-                texMaterial.map = uv;
+                texMaterial.map = textureLoader.load('data/uv.jpg');
 
                 // renderer
 
                 renderer = new THREE.WebGLRenderer( { antialias: true } );
                 renderer.setPixelRatio( window.devicePixelRatio );
                 renderer.setSize( window.innerWidth, window.innerHeight );
-
                 container.appendChild( renderer.domElement );
 
                 // resize
 
                 window.addEventListener( 'resize', onWindowResize, false );
 
+/*
                 // controls
-                orbitControls = new THREE.OrbitControls( orbitCamera, renderer.domElement );
+                orbitControls = new THREE.OrbitControls( viewCamera, renderer.domElement );
                 orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
                 orbitControls.dampingFactor = 0.25;
                 orbitControls.screenSpacePanning = false;
                 orbitControls.maxPolarAngle = 0.75 * Math.PI;
                 orbitControls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
-
                 var sum = new THREE.Vector3(0, 0, 0);
                 var Nsum = 0;
                 function updateOrbitTarget(position, delta) {
@@ -103,6 +104,7 @@
                     orbitControls.object.position.copy(orbitControls.target).add(delta);
                     orbitControls.saveState();
                 }
+                */
 
 
                 /* Ply loading */
@@ -120,7 +122,7 @@
                         var center = new THREE.Vector3();
                         geometry.boundingBox.getCenter(center);
                         points.updateMatrixWorld(true);
-                        updateOrbitTarget(points.localToWorld(center));
+                        // updateOrbitTarget(points.localToWorld(center));
                     };
                 };
                 var loadPly = function(url) { plyParser.load( url, handlePly(url) ); };
@@ -190,10 +192,11 @@
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                         console.log(check, name, camera);
                         camera.add(cameraGroup(camera));
-                        camera.zoom = 0.9; // zoom out a bit to see the image borders
+                        camera.zoom = 0.8; // zoom out a bit to see the image borders
                         scene.add(camera);
                         cameras.push(camera);
-                        updateOrbitTarget(camera.position);
+                        setCamera(cameras.length - 1);
+                        // updateOrbitTarget(camera.position);
                         return camera;
                     };
                 }
@@ -269,10 +272,9 @@
                 /* Keyboard events */
                 function setCamera(id) {
                     cameraId = (id + cameras.length) % cameras.length;
-                    camera = cameras[cameraId];
-                    orbitControls.enabled = cameraId === 0;
+                    nextCamera = cameras[cameraId];
+                    prevCamera.set(viewCamera);
                     onWindowResize();
-                    updateGUI();
                 }
 
                 function loadOrientedImage(orientationUrl, imageUrl, source) {
@@ -320,112 +322,66 @@
                         case '-': plyMaterial.size--; break;
                         case 'b': setCamera(cameraId - 1);  break;
                         case 'n': setCamera(cameraId + 1);  break;
-                        case 'c': console.log(camera); break;
-                        case 'p': camera.add(cameraGroup(new THREE.PerspectiveCamera().copy(camera))); break;
+                        case 'c': console.log(viewCamera); break;
                         default : console.log(event.key);
                     }
                 }
                 document.addEventListener('keydown', keyDown, false);
+
+                viewGUI = gui.addFolder('View');
+                viewGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateProjectionMatrixGUI);
+                viewGUI.add(viewCamera.view, 'enabled').listen().onChange(updateProjectionMatrixGUI);
+                viewGUI.offsetX = viewGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).onChange(updateProjectionMatrixGUI);
+                viewGUI.offsetY = viewGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).listen().onChange(updateProjectionMatrixGUI);
+                viewGUI.width = viewGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).listen().onChange(updateProjectionMatrixGUI);
+                viewGUI.height = viewGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).listen().onChange(updateProjectionMatrixGUI);
+                gui.add(scenes, 'Abbey');
+
+                /* callbacks */
+                function onWindowResize() {
+                    var width = window.innerWidth;
+                    var height = window.innerHeight;
+                    renderer.setSize(width, height);
+                    viewCamera.aspect = width / height;
+                    viewCamera.updateProjectionMatrix();
+                    cameras.forEach((camera) => {
+                        camera.aspect = width / height;
+                        camera.updateProjectionMatrix();
+                    });
+                }
             }
 
-            /* GUI */
-            gui = new dat.GUI();
-            var params = {
-                view: {
-                    enabled: false,
-                    offsetX: 0,
-                    offsetY: 0,
-                    width: 1,
-                    height: 1,
-                    fullWidth: 1,
-                    fullHeight: 1,
-                },
-            };
-
-            function updateDisplays(gui) {
-                for (var i in gui.__controllers) {
-                    gui.__controllers[i].updateDisplay();
-                }
-                for (var i in gui.__folders) {
-                    updateDisplays(gui.__folders[i]);
-                }
+            function render() {
+                renderer.render(scene, viewCamera);
             }
 
-            function updateGUI() {
-                params.zoom = camera.zoom;
-                if (camera.view) {
-                    params.view.enabled = camera.view.enabled;
-                    params.view.offsetX = camera.view.offsetX;
-                    params.view.offsetY = camera.view.offsetY;
-                    params.view.width = camera.view.width;
-                    params.view.height = camera.view.height;
-                    params.view.fullWidth = camera.view.fullWidth;
-                    params.view.fullHeight = camera.view.fullHeight;
-                } else {
-                    params.view.enabled = false;
-                    params.view.offsetX = 0;
-                    params.view.offsetY = 0;
-                    params.view.width = 1;
-                    params.view.height = 1;
-                    params.view.fullWidth = 1;
-                    params.view.fullHeight = 1;
-                }
-                updateDisplays(gui);
-            }
-
-            function updateProjectionMatrixGUI() {
-                camera.zoom = params.zoom;
-                if (params.view.enabled) {
-                    if (!camera.view) {
-                        camera.view = {};
+            function animate(timestamp) {
+                if (nextCamera) {
+                    if (!prevCamera.timestamp) {
+                        prevCamera.timestamp = timestamp;
                     }
-                    camera.view.enabled = params.view.enabled;
-                    camera.view.offsetX = params.view.offsetX;
-                    camera.view.offsetY = params.view.offsetY;
-                    camera.view.width = params.view.width;
-                    camera.view.height = params.view.height;
-                    camera.view.fullWidth = params.view.fullWidth;
-                    camera.view.fullHeight = params.view.fullHeight;
-                } else if (camera.view) {
-                    camera.view.enabled = false;
+                    var t = 0.001 * (timestamp - prevCamera.timestamp) / duration;
+                    if (t < 1) {
+                      viewCamera.set(prevCamera).lerp(nextCamera, t);
+                    } else {
+                      viewCamera.set(nextCamera);
+                      prevCamera.timestamp = undefined;
+                      nextCamera = null;
+                    }
+                    viewGUI.offsetX.max(viewCamera.view.fullWidth);
+                    viewGUI.offsetY.max(viewCamera.view.fullHeight);
+                    viewGUI.width.max(viewCamera.view.fullWidth);
+                    viewGUI.height.max(viewCamera.view.fullHeight);
                 }
-                camera.updateProjectionMatrix();
-            }
-
-            updateGUI();
-            gui.add(params, 'zoom', 0, 2).onChange(updateProjectionMatrixGUI);
-            viewGUI = gui.addFolder('View');
-            viewGUI.add(params.view, 'enabled').onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'offsetX').onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'offsetY').onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'width',0).onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'height',0).onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'fullWidth',0).onChange(updateProjectionMatrixGUI);
-            viewGUI.add(params.view, 'fullHeight',0).onChange(updateProjectionMatrixGUI);
-            scenesGUI = gui.addFolder('Scenes');
-            scenesGUI.add(scenes, 'Abbey');
-            updateGUI();
-
-            /* callbacks */
-            function onWindowResize() {
-                var width = window.innerWidth;
-                var height = window.innerHeight;
-                renderer.setSize(width, height);
-                camera.aspect = width / height;
-                camera.updateProjectionMatrix();
-            }
-
-            function animate() {
-                orbitControls.update();
-                requestAnimationFrame( animate );
+                // orbitControls.update();
+                requestAnimationFrame(animate);
                 render();
 
             }
 
-            function render() {
-                renderer.render( scene, camera );
-            }
 
+            init();
+            animate();
         </script>
     </body>
 </html>

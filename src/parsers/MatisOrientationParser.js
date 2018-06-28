@@ -20,12 +20,12 @@ function parseSpheric(xml, size) {
     var camera = new Camera();
     camera.lambdaphi = getNumbers(xml, 'frame', ['lambda_min', 'lambda_max', 'phi_min', 'phi_max']);
     // patching the ori.MatisOrientationParser..
-    camera.size[1] = 718;
-    camera.lambdaphi[2] = camera.lambdaphi[3] - camera.size[1] * (camera.lambdaphi[1] - camera.lambdaphi[0]) / camera.size[0];
+    camera.view.fullHeight = 718;
+    camera.lambdaphi[2] = camera.lambdaphi[3] - camera.view.fullHeight * (camera.lambdaphi[1] - camera.lambdaphi[0]) / camera.view.fullWidth;
     // set the projection to the top face of the cube map
     camera.projectionMatrix = new Matrix4().set(
-        camera.size[0], 0, camera.size[0] * 0.5, 0,
-        0, camera.size[1], camera.size[1] * 0.5, 0,
+        camera.view.fullWidth, 0, camera.view.fullWidth * 0.5, 0,
+        0, camera.view.fullHeight, camera.view.fullHeight * 0.5, 0,
         0, 0, 0, 1,
         0, 0, 1, 0);
     return camera;

@@ -251,7 +251,7 @@ function parseCheck(xml) {
 function parseOrientation(xml, intrinsics) {
     var camera = parseIntrinsics(intrinsics);
 
-    camera.view = parseView(xml);
+    // camera.view = parseView(xml);
     camera.updateProjectionMatrix();
 
     camera.matrix = parseExtrinsics(xml);

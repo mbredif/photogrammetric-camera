@@ -25,21 +25,29 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         super(undefined, aspect, near, far);
         // for compatibility with THREE.PerspectiveCamera, provide a fov property (computed from focal.y and size.y)
         Object.defineProperty(this, 'fov', {
-            get: () => Math.atan2(this.size.y, 2 * this.focal.y) * 360 / Math.PI,
+            get: () => Math.atan2(this.view.fullHeight, 2 * this.focal.y) * 360 / Math.PI,
             // setting the fov overwrites focal.x and focal.y
             set: (fov) => {
-                var focal = 0.5 * this.size.y / Math.tan(fov * Math.PI / 360);
+                var focal = 0.5 * this.view.fullHeight / Math.tan(fov * Math.PI / 360);
                 this.focal.x = focal;
                 this.focal.y = focal;
             },
         });
         this.isPhotogrammetricCamera = true;
-        this.size = size;
         this.focal = focal;
         this.point = point;
         this.skew = skew;
         this.distos = distos || [];
         this.zoom = 1;
+        this.view = {
+            enabled: false,
+            offsetX: 0,
+            offsetY: 0,
+            width: size.x,
+            height: size.y,
+            fullWidth: size.x,
+            fullHeight: size.y,
+        };
 
         // filmOffset is not supported
         // filmGauge is only used in compatibility PerspectiveCamera functions
@@ -53,6 +61,7 @@ class PhotogrammetricCamera extends PerspectiveCamera {
 
     updateProjectionMatrix() {
         if (!this.preProjectionMatrix) {
+            // super() calls updateProjectionMatrix(), which is not yet fully initialized
             return;
         }
 
@@ -65,19 +74,21 @@ class PhotogrammetricCamera extends PerspectiveCamera {
             0, 0, -1, 0);
 
         this.textureMatrix.set(
-            1 / this.size.x, 0, 0, 0,
-            0, 1 / this.size.y, 0, 0,
+            1 / this.view.fullWidth, 0, 0, 0,
+            0, 1 / this.view.fullHeight, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1);
 
-        var textureAspect = this.size.x / this.size.y;
-        if (this.view !== null && this.view.enabled) {
+        var textureAspect = this.view.fullWidth / this.view.fullHeight;
+        if (this.view.enabled) {
+            textureAspect = this.view.width / this.view.height;
             var sx = this.view.fullWidth / this.view.width;
             var sy = this.view.fullHeight / this.view.height;
-            textureAspect = this.view.width / this.view.height;
+            var ox = this.view.offsetX / this.view.width;
+            var oy = this.view.offsetY / this.view.height;
             this.textureMatrix.premultiply(new Matrix4().set(
-                sx, 0, 0, -sx * this.view.offsetX,
-                0, sy, 0, -sy * this.view.offsetY,
+                sx, 0, 0, -ox,
+                0, sy, 0, -oy,
                 0, 0, 1, 0,
                 0, 0, 0, 1));
         }
@@ -99,9 +110,10 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         }
         this.postProjectionMatrix.premultiply(new Matrix4().makeScale(zoom.x, zoom.y, 1));
 
-
         // projectionMatrix is provided as an approximation: its usage neglects the effects of distortions
         this.projectionMatrix.multiplyMatrices(this.postProjectionMatrix, this.preProjectionMatrix);
+
+        return this;
     }
 
     // transform in place a 3D point p from view coordinates to pixel coordinates in the distorted image frame:
@@ -134,32 +146,56 @@ class PhotogrammetricCamera extends PerspectiveCamera {
 
     copy(source, recursive) {
         super.copy(source, recursive);
-        this.isPhotogrammetricCamera = true;
-        this.size = source.size.clone();
-        this.focal = source.focal.clone();
-        this.point = source.point.clone();
-        this.skew = source.skew;
-        this.distos = source.distos.slice(0); // shallow copy, here, is it an issue ?
-        this.preProjectionMatrix = source.preProjectionMatrix.clone();
-        this.postProjectionMatrix = source.postProjectionMatrix.clone();
-        this.textureMatrix = source.textureMatrix.clone();
-        return this;
+        this.view = {};
+        return this.set(source);
     }
 
     // THREE.PerspectiveCamera compatibility
     getEffectiveFOV() {
-        return Math.atan2(this.size.y, 2 * this.focal.y * this.zoom) * 360 / Math.PI;
+        return Math.atan2(this.view.fullHeight, 2 * this.focal.y * this.zoom) * 360 / Math.PI;
     }
 
     getFocalLength() {
-        return this.focal.y * this.getFilmHeight() / this.size.y;
+        return this.focal.y * this.getFilmHeight() / this.view.fullHeight;
     }
 
     setFocalLength(focalLength) {
-        focalLength *= this.size.y / this.getFilmHeight();
+        focalLength *= this.view.fullHeight / this.getFilmHeight();
         this.focal.x = focalLength;
         this.focal.y = focalLength;
-        this.updateProjectionMatrix();
+        return this.updateProjectionMatrix();
+    }
+
+    lerp(camera, t) {
+        this.focal.lerp(camera.focal, t);
+        this.point.lerp(camera.point, t);
+        this.position.lerp(camera.position, t);
+        this.quaternion.slerp(camera.quaternion, t);
+        // TODO: this.distos = ???
+        this.skew += t * (camera.skew - this.skew);
+        this.zoom += t * (camera.zoom - this.zoom);
+        this.aspect += t *(camera.aspect - this.aspect);
+        this.near += t * (camera.near - this.near);
+        this.far += t *(camera.far - this.far);
+        this.view.offsetX += t * (camera.view.offsetX - this.view.offsetX);
+        this.view.offsetY += t * (camera.view.offsetY - this.view.offsetY);
+        this.view.width += t * (camera.view.width - this.view.width);
+        this.view.height += t * (camera.view.height - this.view.height);
+        this.view.fullWidth += t * (camera.view.fullWidth - this.view.fullWidth);
+        this.view.fullHeight += t * (camera.view.fullHeight - this.view.fullHeight);
+        return this.updateProjectionMatrix();
+    }
+
+    set(source) {
+        this.focal.copy(source.focal);
+        this.point.copy(source.point);
+        this.position.copy(source.position);
+        this.quaternion.copy(source.quaternion);
+        // TODO: deep copy ?
+        this.distos = source.distos.slice(0);
+        this.skew = source.skew;
+        Object.assign(this.view, source.view);
+        return this.updateProjectionMatrix();
     }
 }
 
