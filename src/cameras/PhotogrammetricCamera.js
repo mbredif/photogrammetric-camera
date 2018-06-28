@@ -187,6 +187,7 @@ class PhotogrammetricCamera extends PerspectiveCamera {
     }
 
     set(source) {
+        this.name = source.name;
         this.focal.copy(source.focal);
         this.point.copy(source.point);
         this.position.copy(source.position);

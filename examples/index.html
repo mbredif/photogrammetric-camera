@@ -42,8 +42,8 @@
         <script src="js/PLYLoader.js"></script>
         <!-- <script src="js/OrbitControls.js"></script> -->
         <script>
-            var orbitTarget, scene, renderer, plyGroup, cameras, cameraId, texMaterial, wireMaterial, orbitControls;
-            var gui, cameraGUI;
+            var orbitTarget, orbitControls;
+            var scene, renderer, plyGroup, cameras, texMaterial, wireMaterial;
             var images = {};
             var scenes;
             var prevCamera = new PhotogrammetricCamera();
@@ -53,18 +53,10 @@
             var useCustomCameraHelper = true;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
 
-            /* GUI */
-            gui = new dat.GUI();
-            function updateProjectionMatrixGUI() {
-                viewCamera.updateProjectionMatrix();
-            };
-
             function init() {
-
                 var container = document.createElement( 'div' );
                 document.body.appendChild( container );
                 scene = new THREE.Scene();
-                cameraId = 0;
                 viewCamera.name = 'view';
                 cameras = [];
 
@@ -137,8 +129,9 @@
                         images[name] = texture;
                         texture.name = name;
                         cameras.filter(camera => camera.name == name).forEach((camera) => {
-                            var texMaterial = camera.children[0] && camera.children[0].texMaterial;
-                            if (texMaterial) texMaterial.map = texture
+                            camera.children.forEach(child => {
+                                if (child.texMaterial) child.texMaterial.map = texture
+                            });
                         });
                     };
                 }
@@ -206,7 +199,8 @@
                         }
                         scene.add(camera);
                         cameras.push(camera);
-                        setCamera(cameras.length - 1);
+                        cameras.sort((a, b) => a.name > b.name);
+                        setCamera(camera);
                         // updateOrbitTarget(camera.position);
                         return camera;
                     };
@@ -281,13 +275,20 @@
                 document.addEventListener('drop',  addFiles, false);
 
                 /* Keyboard events */
-                function setCamera(id) {
-                    cameraId = (id + cameras.length) % cameras.length;
+                function setCamera(camera) {
+                    if (!camera) return;
+                    console.log(camera.name);
                     prevCamera.set(viewCamera);
-                    nextCamera.set(cameras[cameraId]);
+                    nextCamera.set(camera);
                     prevCamera.timestamp = 0; // timestamp will be set in the update callback
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
+                }
+
+                function setCameraByDeltaIndex(delta) {
+                    let index = cameras.findIndex(camera => camera.name == nextCamera.name);
+                    index = (index + delta + cameras.length) %  cameras.length;
+                    setCamera(cameras[index]);
                 }
 
                 function loadOrientedImage(orientationUrl, imageUrl, source) {
@@ -333,21 +334,32 @@
                     switch(event.key) {
                         case '+': plyMaterial.size++; break;
                         case '-': plyMaterial.size--; break;
-                        case 'b': setCamera(cameraId - 1);  break;
-                        case 'n': setCamera(cameraId + 1);  break;
+                        case 'b': setCameraByDeltaIndex(-1);  break;
+                        case 'n': setCameraByDeltaIndex(+1);  break;
                         case 'c': console.log(viewCamera); break;
                         default : console.log(event.key);
                     }
                 }
                 document.addEventListener('keydown', keyDown, false);
 
-                viewGUI = gui.addFolder('View');
-                viewGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateProjectionMatrixGUI);
-                viewGUI.add(viewCamera.view, 'enabled').listen().onChange(updateProjectionMatrixGUI);
-                viewGUI.offsetX = viewGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).onChange(updateProjectionMatrixGUI);
-                viewGUI.offsetY = viewGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).listen().onChange(updateProjectionMatrixGUI);
-                viewGUI.width = viewGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).listen().onChange(updateProjectionMatrixGUI);
-                viewGUI.height = viewGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).listen().onChange(updateProjectionMatrixGUI);
+                /* GUI */
+                var gui = new dat.GUI();
+                cameraGUI = gui.addFolder('Camera');
+                function updateViewCameraFromGUI() {
+                    viewCamera.updateProjectionMatrix();
+                };
+                function updateGUIFromViewCamera() {
+                    cameraGUI.offsetX.max(viewCamera.view.fullWidth);
+                    cameraGUI.offsetY.max(viewCamera.view.fullHeight);
+                    cameraGUI.width.max(viewCamera.view.fullWidth);
+                    cameraGUI.height.max(viewCamera.view.fullHeight);
+                };
+                cameraGUI.zoom = cameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.view = cameraGUI.add(viewCamera.view, 'enabled').name('crop').listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.offsetX = cameraGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).name('crop x0').listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.offsetY = cameraGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).name('crop y0').listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.width = cameraGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).name('crop width').listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.height = cameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
                 gui.add(scenes, 'Abbey');
 
                 /* callbacks */
@@ -383,10 +395,10 @@
                       prevCamera.timestamp = undefined;
                       nextCamera.timestamp = undefined;
                     }
-                    viewGUI.offsetX.max(viewCamera.view.fullWidth);
-                    viewGUI.offsetY.max(viewCamera.view.fullHeight);
-                    viewGUI.width.max(viewCamera.view.fullWidth);
-                    viewGUI.height.max(viewCamera.view.fullHeight);
+                    cameraGUI.offsetX.max(viewCamera.view.fullWidth);
+                    cameraGUI.offsetY.max(viewCamera.view.fullHeight);
+                    cameraGUI.width.max(viewCamera.view.fullWidth);
+                    cameraGUI.height.max(viewCamera.view.fullHeight);
                 }
                 // orbitControls.update();
                 requestAnimationFrame(animate);
