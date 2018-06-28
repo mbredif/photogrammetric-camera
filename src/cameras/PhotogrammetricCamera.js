@@ -191,9 +191,12 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         this.point.copy(source.point);
         this.position.copy(source.position);
         this.quaternion.copy(source.quaternion);
-        // TODO: deep copy ?
-        this.distos = source.distos.slice(0);
+        this.distos = source.distos.slice(0); // TODO: deep copy ?
         this.skew = source.skew;
+        this.zoom = source.zoom;
+        this.aspect = source.aspect;
+        this.near = source.near;
+        this.far = source.far;
         Object.assign(this.view, source.view);
         return this.updateProjectionMatrix();
     }

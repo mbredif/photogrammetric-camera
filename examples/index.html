@@ -48,8 +48,10 @@
             var scenes;
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
-            var nextCamera = null;
+            var nextCamera = new PhotogrammetricCamera();
             var duration = 0.5;
+            var useCustomCameraHelper = true;
+            viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
 
             /* GUI */
             gui = new dat.GUI();
@@ -134,9 +136,10 @@
                         var texture = textureLoader.load(url);
                         images[name] = texture;
                         texture.name = name;
-                        cameras.filter(camera => camera.name == name).forEach(camera =>
-                            camera.children[0].texMaterial.map = texture
-                        );
+                        cameras.filter(camera => camera.name == name).forEach((camera) => {
+                            var texMaterial = camera.children[0] && camera.children[0].texMaterial;
+                            if (texMaterial) texMaterial.map = texture
+                        });
                     };
                 }
 
@@ -191,7 +194,7 @@
                         var check = '[?]';
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                         console.log(check, name, camera);
-                        if (true) {
+                        if (useCustomCameraHelper) {
                             // use our Camera Helper
                             camera.add(cameraHelper(camera));
                         } else {
@@ -199,7 +202,6 @@
                             camera.near = 0.5;
                             camera.far = 1;
                             scene.add(new THREE.CameraHelper(camera));
-                            camera.zoom = 0.8; // zoom out a bit to see the image borders
                             camera.far = 1000;
                         }
                         scene.add(camera);
@@ -281,8 +283,10 @@
                 /* Keyboard events */
                 function setCamera(id) {
                     cameraId = (id + cameras.length) % cameras.length;
-                    nextCamera = cameras[cameraId];
                     prevCamera.set(viewCamera);
+                    nextCamera.set(cameras[cameraId]);
+                    prevCamera.timestamp = 0; // timestamp will be set in the update callback
+                    nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
                 }
 
@@ -348,15 +352,16 @@
 
                 /* callbacks */
                 function onWindowResize() {
-                    var width = window.innerWidth;
-                    var height = window.innerHeight;
+                    const width = window.innerWidth;
+                    const height = window.innerHeight;
+                    const aspect = width / height;
                     renderer.setSize(width, height);
-                    viewCamera.aspect = width / height;
+                    viewCamera.aspect = aspect;
                     viewCamera.updateProjectionMatrix();
-                    cameras.forEach((camera) => {
-                        camera.aspect = width / height;
-                        camera.updateProjectionMatrix();
-                    });
+                    prevCamera.aspect = aspect;
+                    prevCamera.updateProjectionMatrix();
+                    nextCamera.aspect = aspect;
+                    nextCamera.updateProjectionMatrix();
                 }
             }
 
@@ -365,17 +370,18 @@
             }
 
             function animate(timestamp) {
-                if (nextCamera) {
-                    if (!prevCamera.timestamp) {
+                if (prevCamera.timestamp !== undefined) {
+                    if (prevCamera.timestamp == 0) {
                         prevCamera.timestamp = timestamp;
+                        nextCamera.timestamp = prevCamera.timestamp + 1000 * duration;
                     }
-                    var t = 0.001 * (timestamp - prevCamera.timestamp) / duration;
-                    if (t < 1) {
+                    if (timestamp < nextCamera.timestamp) {
+                      const t = 0.001 * (timestamp - prevCamera.timestamp) / duration;
                       viewCamera.set(prevCamera).lerp(nextCamera, t);
                     } else {
                       viewCamera.set(nextCamera);
                       prevCamera.timestamp = undefined;
-                      nextCamera = null;
+                      nextCamera.timestamp = undefined;
                     }
                     viewGUI.offsetX.max(viewCamera.view.fullWidth);
                     viewGUI.offsetY.max(viewCamera.view.fullHeight);
