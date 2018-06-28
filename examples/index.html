@@ -145,7 +145,7 @@
                 }
 
                 /* Orientation loading */
-                function cameraGroup(camera) {
+                function cameraHelper(camera) {
                     // create the group (looking at intrinsics only) that should be added to the camera frame.
                     var group = new THREE.Group();
 
@@ -191,8 +191,17 @@
                         var check = '[?]';
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                         console.log(check, name, camera);
-                        camera.add(cameraGroup(camera));
-                        camera.zoom = 0.8; // zoom out a bit to see the image borders
+                        if (true) {
+                            // use our Camera Helper
+                            camera.add(cameraHelper(camera));
+                        } else {
+                            // use THREE.CameraHelper
+                            camera.near = 0.5;
+                            camera.far = 1;
+                            scene.add(new THREE.CameraHelper(camera));
+                            camera.zoom = 0.8; // zoom out a bit to see the image borders
+                            camera.far = 1000;
+                        }
                         scene.add(camera);
                         cameras.push(camera);
                         setCamera(cameras.length - 1);
