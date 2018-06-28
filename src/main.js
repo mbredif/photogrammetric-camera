@@ -6,3 +6,4 @@ export { default as MicmacOrientationParser } from './parsers/MicmacOrientationP
 export { default as PhotogrammetricCamera } from './cameras/PhotogrammetricCamera';
 export { default as FilesSource } from './sources/FilesSource';
 export { default as FetchSource } from './sources/FetchSource';
+export { default as PointsMaterial } from './materials/PointsMaterial';
