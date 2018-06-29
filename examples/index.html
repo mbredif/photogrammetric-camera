@@ -6,8 +6,7 @@
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
         <style>
             #help {
-                text-align:center;
-                margin-top: 50vh;
+                margin: 50vh;
                 transform: translateY(-50%);
             }
             ul {
@@ -19,15 +18,35 @@
                 overflow: hidden;
                 color: white;
             }
+            a {
+                color: yellow;
+            }
         </style>
     </head>
     <body>
-        <div id='help'> Drag and drop some Micmac files here :
+        <div id='help'>
+            <h1>Image Based Rendering of <a href="https://github.com/micmacIGN">Micmac</a> datasets</h1>
+            <p>You can open Micmac files here using drag and drop :</p>
             <ul>
-                <li>Orientation*.xml</li>
-                <li>AutoCal*.xml</li>
-                <li>AperiCloud*.ply</li>
+                <li>Images: {name}.jpg files</li>
+                <li>Orientations: Orientation-{name}.{ext}.xml (orientations and images are matched by name)</li>
+                <li>Intrinsics: AutoCal*.xml (must be drag-and-dropped jointly with orientations that share its intrinsics)</li>
+                <li>PointClouds: *.ply (eg the AperiCloud)</li>
             </ul>
+
+            <p>The scene is composed of a large view-centered sphere (500m) and the loaded point clouds if any.</p>
+
+            <p>These are colored by the intrinsic colors of the pointcloud, replaced by the unprojection of the image from the current camera.</p>
+            <p>During camera animation, the image of the target camera is used.</p>
+            <p><img src="data/uv.jpg" width=30px/> Orientations with no images show a blue/red calibration texture. </p>
+
+            <p>Keyboard Actions :</p>
+            <ul>
+                <li>b/n: move to previous/next image</li>
+                <li>-/+: decrease/increase point size</li>
+                <li>c: print the current camera in the console</li>
+            </ul>
+            Mathieu Brédif (<a href="http://recherche.ign.fr/labos/matis/~bredif">IGN ENSG, Lastig/Geovis, Univ. Paris Est</a>, <a href="http://github.com/mbredif">github</a>)
         </div>
         <script src="dist/three-photogrammetric-camera.js"></script>
         <script>
@@ -62,12 +81,13 @@
                 scene = new THREE.Scene();
                 viewCamera.name = 'view';
                 cameras = new THREE.Group();
+                cameras.visible = false;
                 scene.add(cameras);
                 scene.add(viewCamera);
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
                 var sphereMaterial = new PointsMaterial({ map: uvTexture, side: THREE.DoubleSide });
-                var sphere = new THREE.Mesh(new THREE.SphereBufferGeometry( 100, 32, 32 ), sphereMaterial);
+                var sphere = new THREE.Mesh(new THREE.SphereBufferGeometry( 500, 32, 32 ), sphereMaterial);
                 viewCamera.add(sphere);
 
                 // materials
