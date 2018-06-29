@@ -53,6 +53,7 @@
             var duration = 0.3;
             var useCustomCameraHelper = true;
             var scenes;
+            var todos = [];
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
 
             function init() {
@@ -221,9 +222,9 @@
 
                 function parseOrientation(source) {
                     var parsers = [MicmacOrientationParser, MatisOrientationParser];
-                    return function(xml) {
+                    return function parseOrientationXML(xml) {
                         for(const parser of parsers) {
-                            var parsed = parser.parse(xml, source).catch(console.warn);
+                            var parsed = parser.parse(xml, source);
                             if (parsed) return parsed;
                         }
                         return undefined;
@@ -248,8 +249,9 @@
                     var source = new FetchSource(path);
                     source.read(file, 'text').then((json) => {
                         json = JSON.parse(json);
-                        json.ply.forEach(url => loadPly(source.path + url));
-                        json.ori.forEach((orientationUrl, i) => loadOrientedImage(orientationUrl, json.img[i], source));
+                        source.path = json.url;
+                        json.ply.forEach(url => todos.push(() => loadPly(source.path + url)));
+                        json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
                     });
                 }
 
@@ -359,7 +361,7 @@
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
                     },
                     Maurepas: function() {
-                        loadJSON('http://mathieu.bredif.free.fr/dias/', 'maurepas.json');
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=dias/', 'maurepas.json');
                     },
                     Chambord: function() {
                         // TODO
@@ -410,7 +412,13 @@
                 renderer.render(scene, viewCamera);
             }
 
+            var todoTimestamp = 0;
             function animate(timestamp) {
+                if (todos.length && timestamp > todoTimestamp) {
+                    todos.shift()();
+                    todoTimestamp = timestamp + 1000;
+                }
+
                 if (prevCamera.timestamp !== undefined) {
                     if (prevCamera.timestamp == 0) {
                         prevCamera.timestamp = timestamp;

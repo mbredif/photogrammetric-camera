@@ -3,15 +3,26 @@
   "version": "0.1.1",
   "description": "PhotogrammetricCamera for THREE",
   "main": "src/main.js",
+  "gh-pages-deploy": {
+    "commit": "deploy",
+    "post": [
+      "build",
+      "clean-source"
+    ],
+    "noprompt": false
+  },
   "scripts": {
     "build": "webpack -p",
-    "start": "webpack-dev-server -d --inline --hot"
+    "start": "webpack-dev-server -d --inline --hot",
+    "deploy": "gh-pages-deploy -- 'gh-pages-deploy'",
+    "clean-source": "rimraf webpack.config.js src package.json package-lock.json"
   },
   "repository": "mbredif/three-photogrammetric-camera",
   "bugs": "https://github.com/mbredif/three-photogrammetric-camera/issues",
   "author": "Mathieu Brédif",
   "license": "(CECILL-B OR MIT)",
   "devDependencies": {
+    "gh-pages-deploy": "^0.4.2",
     "three": "^0.89.0",
     "webpack": "^4.1.1",
     "webpack-cli": "^2.0.15",

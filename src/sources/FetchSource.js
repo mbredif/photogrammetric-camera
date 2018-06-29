@@ -26,7 +26,7 @@ class FetchSource {
    */
     constructor(path, options = {}) {
         this.path = path || '';
-        this.fetchOptions = options.fetchOptions || { "crossOrigin" : "anonymous" };
+        this.fetchOptions = options.fetchOptions || { crossOrigin: 'anonymous' };
         this.fetch = options.fetch || fetch;
         this.decode = options.decode || decode;
     }

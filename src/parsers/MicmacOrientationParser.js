@@ -278,8 +278,9 @@ export default {
         }
         // sanity check for format
         xml = xml.getElementsByTagName('OrientationConique')[0];
-        if (!xml) return undefined;
-
+        if (!xml) {
+            return undefined;
+        }
         var file = getText(xml, 'FileInterne');
         var TypeProj = getText(xml, 'TypeProj');
         if (TypeProj !== 'eProjStenope') {
