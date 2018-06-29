@@ -45,11 +45,12 @@
         <script>
             var orbitTarget, orbitControls;
             var scene, renderer, plyGroup, cameras, texMaterial, wireMaterial;
-            var images = {};
+            var texMaterials = {};
+            var textures = {};
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
             var nextCamera = new PhotogrammetricCamera();
-            var duration = 0.5;
+            var duration = 0.3;
             var useCustomCameraHelper = true;
             var scenes;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
@@ -61,15 +62,19 @@
                 viewCamera.name = 'view';
                 cameras = new THREE.Group();
                 scene.add(cameras);
+                scene.add(viewCamera);
+                var textureLoader = new THREE.TextureLoader();
+                const uvTexture = textureLoader.load('data/uv.jpg');
+                var sphereMaterial = new PointsMaterial({ map: uvTexture, side: THREE.DoubleSide });
+                var sphere = new THREE.Mesh(new THREE.SphereBufferGeometry( 100, 32, 32 ), sphereMaterial);
+                viewCamera.add(sphere);
 
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
                 texMaterial = new THREE.MeshBasicMaterial();
-                var textureLoader = new THREE.TextureLoader();
                 texMaterial.opacity = 0.2;
                 texMaterial.transparent = true;
                 texMaterial.blending = THREE.NormalBlending;
-                const uvTexture = textureLoader.load('data/uv.jpg');
                 texMaterial.map = uvTexture;
 
                 // renderer
@@ -131,15 +136,11 @@
                     showHelp(false);
                     return function(url) {
                         var texture = textureLoader.load(url);
-                        images[name] = texture;
-                        texture.name = name;
-                        cameras.filter(camera => camera.name == name).forEach((camera) => {
-                            camera.children.forEach(child => {
-                                if (child.texMaterial) child.texMaterial.map = texture
-                            });
-                            plyMaterial.uvwTransform.copy(camera.projectionMatrix).multiply(camera.matrixWorldInverse);
-                        });
-                        plyMaterial.map = texture;
+                        const match = name.match(/(.*)\.[\w\d]/i);
+                        texture.name = match ? match[1] : name;
+                        textures[texture.name] = texture;
+                        if (texMaterials[texture.name]) texMaterials[texture.name].map = texture;
+                        setCamera(cameras.getObjectByName(texture.name));
                     };
                 }
 
@@ -170,8 +171,9 @@
                         geometry.addGroup(0, 12, 0);
                         geometry.addGroup(12, 6, 1);
 
-                        group.texMaterial = texMaterial.clone();
-                        var mesh = new THREE.Mesh( geometry, [wireMaterial, group.texMaterial] );
+                        texMaterials[camera.name] = texMaterial.clone();
+                        texMaterials[camera.name].map = textures[camera.name] || uvTexture;
+                        var mesh = new THREE.Mesh( geometry, [wireMaterial, texMaterials[camera.name]] );
                         mesh.scale.set(10, 10, 10);
                         group.add(mesh);
                     }
@@ -190,10 +192,15 @@
                     showHelp(false);
                     return function(camera) {
                         if (!camera) return;
-                        camera.name = name;
+                        const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
+                        camera.name = match ? match[1] : name;
+                        if (cameras.children.find(cam => cam.name == camera.name)) {
+                            console.warn(`Camera "${camera.name}" was already loaded, skipping`);
+                            return;
+                        }
                         var check = '[?]';
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
-                        console.log(check, name, camera);
+                        console.log(check, name);
                         if (useCustomCameraHelper) {
                             // use our Camera Helper
                             camera.add(cameraHelper(camera));
@@ -202,7 +209,7 @@
                             camera.near = 0.5;
                             camera.far = 1;
                             scene.add(new THREE.CameraHelper(camera));
-                            camera.far = 1000;
+                            camera.far = 10000;
                         }
                         cameras.add(camera);
                         cameras.children.sort((a, b) => a.name.localeCompare(b.name));
@@ -216,7 +223,7 @@
                     var parsers = [MicmacOrientationParser, MatisOrientationParser];
                     return function(xml) {
                         for(const parser of parsers) {
-                            var parsed = parser.parse(xml, source);
+                            var parsed = parser.parse(xml, source).catch(console.warn);
                             if (parsed) return parsed;
                         }
                         return undefined;
@@ -234,6 +241,15 @@
                         xml = new window.DOMParser().parseFromString(xml, 'text/xml');
                         var names = Array.from(xml.getElementsByTagName('Name'));
                         names.forEach(name => loadOrientation(dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', source));
+                    });
+                }
+
+                function loadJSON(path, file) {
+                    var source = new FetchSource(path);
+                    source.read(file, 'text').then((json) => {
+                        json = JSON.parse(json);
+                        json.ply.forEach(url => loadPly(source.path + url));
+                        json.ori.forEach((orientationUrl, i) => loadOrientedImage(orientationUrl, json.img[i], source));
                     });
                 }
 
@@ -290,6 +306,9 @@
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
                     plyMaterial.uvwTransform.copy(camera.projectionMatrix).multiply(camera.matrixWorldInverse);
+                    plyMaterial.map = textures[camera.name] || uvTexture;
+                    sphereMaterial.uvwTransform.copy(plyMaterial.uvwTransform);
+                    sphereMaterial.map = plyMaterial.map;
                 }
 
                 function setCameraByDeltaIndex(delta) {
@@ -300,7 +319,7 @@
 
                 function loadOrientedImage(orientationUrl, imageUrl, source) {
                   loadOrientation(orientationUrl, source)
-                  .then(camera => loadImage(camera.name, source.path + imageUrl));
+                  .then(camera => camera && loadImage(camera.name, source.path + imageUrl));
                 }
 
                 function keyDown(event) {
@@ -340,12 +359,7 @@
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
                     },
                     Maurepas: function() {
-                        // TODO
-                        // loadPly(base + 'Maurepas/Exterieur/AperiCloud_MEP_Campari_v2.ply');
-                        // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E730.CR2.xml');
-                        // loadOrientation(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/Orientation-Maurepas_Ext_3E731.CR2.xml');
-                        // loadFileImSel(base + 'Maurepas/Exterieur/2-', 'Ori-MEP_MaurepasExt/');
-                        // loadFileImSel(base + 'Maurepas/Interieur/', 'Ori-MEP-Campari/');
+                        loadJSON('http://mathieu.bredif.free.fr/dias/', 'maurepas.json');
                     },
                     Chambord: function() {
                         // TODO
@@ -378,8 +392,9 @@
                     cameraGUI.width.max(camera.view.fullWidth);
                     cameraGUI.height.max(camera.view.fullHeight);
                 };
-                cameraGUI.near = cameraGUI.add(viewCamera, 'near', 0, 100).listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 1000).listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.visible = cameraGUI.add(cameras, 'visible');
+                cameraGUI.near = cameraGUI.add(viewCamera, 'near', 0, 10).listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 100).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.zoom = cameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.view = cameraGUI.add(viewCamera.view, 'enabled').name('crop').listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.offsetX = cameraGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).name('crop x0').listen().onChange(updateViewCameraFromGUI);
@@ -387,6 +402,7 @@
                 cameraGUI.width = cameraGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).name('crop width').listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.height = cameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
                 gui.add(scenes, 'Abbey');
+                gui.add(scenes, 'Maurepas');
                 return gui;
             }
 
@@ -408,6 +424,8 @@
                       prevCamera.timestamp = undefined;
                       nextCamera.timestamp = undefined;
                     }
+                    viewCamera.far = 10000;
+                    viewCamera.updateProjectionMatrix();
                     gui.updateFromCamera(viewCamera);
                 }
                 // orbitControls.update();

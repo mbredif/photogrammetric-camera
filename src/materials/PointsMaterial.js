@@ -18,6 +18,9 @@ ShaderChunk.common = `${ShaderChunk.common}
 #ifdef USE_WORLDPOS
 varying vec3 vWorldPosition;
 #endif
+#ifdef USE_MAP4
+#undef USE_MAP
+#endif
 `
 
 ShaderChunk.worldpos_vertex = `
@@ -33,6 +36,7 @@ ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
 #ifdef USE_MAP4
 
 	uniform mat4 uvwTransform;
+  uniform sampler2D map;
 
 #endif
 `
@@ -42,9 +46,10 @@ ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
 
 	vec4 uvw= uvwTransform * vec4(vWorldPosition, 1);
   uvw.xyz /= 2. * uvw.w;
-  if (all(lessThan(abs(uvw.xyz),vec3(0.5)))) {
-    vec4 color = texture2D( map, 0.5 + uvw.xy);
-    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a);
+  if (all(lessThan(abs(uvw.xyz),vec3(0.5))))
+  {
+    vec4 color = texture2D(map, 0.5 + uvw.xy);
+    diffuseColor.rgb = color.rgb; // mix(diffuseColor.rgb, color.rgb, color.a);
   }
 
 #endif
@@ -59,28 +64,29 @@ function definePropertyUniform(object, property, defaultValue) {
                 object.uniformsNeedUpdate = true;
                 object.uniforms[property].value = value;
             }
-            console.log(property, value);
         }
     });
 }
 
 class PointsMaterial extends ShaderMaterial {
     constructor(options = {}) {
-        options.vertexShader = options.vertexShader || ShaderLib.points.vertexShader;
-        options.fragmentShader = options.fragmentShader || ShaderLib.points.fragmentShader;
-        options.defines = options.defines || {};
-        options.defines.USE_WORLDPOS = '';
-        options.defines.USE_MAP4 = '';
-        if (pop(options, 'alphaMap')) options.defines.USE_ALPHAMAP = '';
-        if (pop(options, 'vertexColors')) options.defines.USE_COLOR = '';
-        if (pop(options, 'sizeAttenuation')) options.defines.USE_SIZEATTENUATION = '';
-        if (pop(options, 'logarithmicDepthBuffer')) options.defines.USE_LOGDEPTHBUF = '';
         const size = pop(options, 'size', 1);
         const diffuse = pop(options, 'color', new Color(0xeeeeee));
         const uvwTransform = pop(options, 'uvwTransform', new Matrix4());
         const map = pop(options, 'map', null);
         const alphaMap = pop(options, 'alphaMap', null);
         const scale = pop(options, 'scale', 1);
+        options.vertexShader = options.vertexShader || ShaderLib.points.vertexShader;
+        options.fragmentShader = options.fragmentShader || ShaderLib.points.fragmentShader;
+        options.defines = options.defines || {};
+        if (map) {
+            options.defines.USE_MAP4 = '';
+            options.defines.USE_WORLDPOS = '';
+        }
+        if (alphaMap) options.defines.USE_ALPHAMAP = '';
+        if (options.vertexColors) options.defines.USE_COLOR = '';
+        if (options.logarithmicDepthBuffer) options.defines.USE_LOGDEPTHBUF = '';
+        if (pop(options, 'sizeAttenuation')) options.defines.USE_SIZEATTENUATION = '';
         super(options);
         definePropertyUniform(this, 'size', size);
         definePropertyUniform(this, 'diffuse', diffuse);

@@ -29,7 +29,8 @@ class FilesSource {
     }
 
     read(url, type) {
-        return this.decode(this.files[this.path(url)], type);
+        const file = this.files[this.path(url)];
+        return file ? this.decode(file, type) : Promise.reject(new Error(`file not found: ${url}`));
     }
 }
 
