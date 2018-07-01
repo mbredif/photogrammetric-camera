@@ -2,25 +2,25 @@ import {Vector2, Vector3, Matrix4, Euler} from 'three';
 import PhotogrammetricDistortion from '../cameras/PhotogrammetricDistortion';
 import PhotogrammetricCamera from '../cameras/PhotogrammetricCamera';
 
-function getText(xml, tagName) {
+function parseText(xml, tagName) {
     var node = xml.getElementsByTagName(tagName)[0];
     return node && node.childNodes[0].nodeValue.trim();
 }
 
-function getNumbers(xml, tagName, value) {
-    var text = getText(xml, tagName);
+function parseNumbers(xml, tagName, value) {
+    var text = parseText(xml, tagName);
     return text ? text.split(' ').filter(String).map(Number) : value;
 }
 
-function getVector2(xml, tagName, value) {
-    return new Vector2().fromArray(getNumbers(xml, tagName, value));
+function parseVector2(xml, tagName, value) {
+    return new Vector2().fromArray(parseNumbers(xml, tagName, value));
 }
 
-function getVector3(xml, tagName, value) {
-    return new Vector3().fromArray(getNumbers(xml, tagName, value));
+function parseVector3(xml, tagName, value) {
+    return new Vector3().fromArray(parseNumbers(xml, tagName, value));
 }
 
-function getChildNumbers(xml, tagName) {
+function parseChildNumbers(xml, tagName) {
     return Array.from(xml.getElementsByTagName(tagName)).map(node => Number(node.childNodes[0].nodeValue));
 }
 
@@ -30,17 +30,17 @@ function parseDistortion(xml) {
     var params;
     var states;
     if (disto.type === 'ModUnif') {
-        disto.type = getText(xml, 'TypeModele');
-        params = getChildNumbers(xml, 'Params');
-        states = getChildNumbers(xml, 'Etats');
+        disto.type = parseText(xml, 'TypeModele');
+        params = parseChildNumbers(xml, 'Params');
+        states = parseChildNumbers(xml, 'Etats');
     }
 
     switch (disto.type) {
         case 'ModNoDist':
             return undefined;
         case 'ModRad':
-            disto.C = getNumbers(xml, 'CDist'); // distortion center in pixels
-            disto.R = getChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
+            disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
+            disto.R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
             disto.project = PhotogrammetricDistortion.projectRadial;
             return disto;
         case 'eModelePolyDeg2':
@@ -67,10 +67,10 @@ function parseDistortion(xml) {
             disto.project = PhotogrammetricDistortion.projectPolynom;
             return disto;
         case 'ModPhgrStd':
-            disto.C = getNumbers(xml, 'CDist'); // distortion center in pixels
-            disto.R = getChildNumbers(xml, 'CoeffDist'); // radial distortion coefficients
-            disto.P = getNumbers(xml, 'P1', [0]).concat(getNumbers(xml, 'P2', [0]));
-            disto.b = getNumbers(xml, 'b1', [0]).concat(getNumbers(xml, 'b2', [0]));
+            disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
+            disto.R = parseChildNumbers(xml, 'CoeffDist'); // radial distortion coefficients
+            disto.P = parseNumbers(xml, 'P1', [0]).concat(parseNumbers(xml, 'P2', [0]));
+            disto.b = parseNumbers(xml, 'b1', [0]).concat(parseNumbers(xml, 'b2', [0]));
             disto.project = PhotogrammetricDistortion.projectFraser;
             return disto;
         case 'eModeleEbner':
@@ -105,15 +105,15 @@ function parseIntrinsics(xml) {
     if (!(xml instanceof Node)) {
         xml = new window.DOMParser().parseFromString(xml, 'text/xml');
     }
-    var KnownConv = getText(xml, 'KnownConv');
+    var KnownConv = parseText(xml, 'KnownConv');
     if (KnownConv !== 'eConvApero_DistM2C') {
         throw new Error(`Error parsing micmac orientation : unknown convention ${KnownConv}`);
     }
-    var focal = getVector2(xml, 'F'); // focal length in pixels
-    var point = getVector2(xml, 'PP'); // image projection center in pixels
-    var size = getVector2(xml, 'SzIm'); // image size in pixels
+    var focal = parseVector2(xml, 'F'); // focal length in pixels
+    var point = parseVector2(xml, 'PP'); // image projection center in pixels
+    var size = parseVector2(xml, 'SzIm'); // image size in pixels
     var skew = 0;
-    var rmax = getNumbers(xml, 'RayonUtile', [])[0];
+    var rmax = parseNumbers(xml, 'RayonUtile', [])[0];
     focal.y = focal.y || focal.x; // fy defaults to fx
     var distos = Array.from(xml.getElementsByTagName('CalibDistortion'))
         .map(parseDistortion)
@@ -130,7 +130,7 @@ function parseIntrinsics(xml) {
 
 // https://github.com/micmacIGN/micmac/blob/e0008b7a084f850aa9db4dc50374bd7ec6984da6/src/ori_phot/orilib.cpp#L3069-L3190
 function parseConv(xml) {
-    var KnownConv = getText(xml, 'KnownConv');
+    var KnownConv = parseText(xml, 'KnownConv');
     if (!KnownConv) return undefined;
     var degree = Math.PI / 180;
     var grade = Math.PI / 200;
@@ -163,9 +163,9 @@ function parseExtrinsics(xml) {
     var M = new Matrix4();
     switch (encoding) {
         case 'CodageMatr':
-            var L1 = getNumbers(rotation, 'L1');
-            var L2 = getNumbers(rotation, 'L2');
-            var L3 = getNumbers(rotation, 'L3');
+            var L1 = parseNumbers(rotation, 'L1');
+            var L2 = parseNumbers(rotation, 'L2');
+            var L3 = parseNumbers(rotation, 'L3');
             M.set(
                 L1[0], L1[1], L1[2], 0,
                 L2[0], L2[1], L2[2], 0,
@@ -175,7 +175,7 @@ function parseExtrinsics(xml) {
 
         case 'CodageAngulaire':
             console.warn('CodageAngulaire has never been tested');
-            var A = getNumbers(rotation, 'CodageAngulaire').map(x => x * conv.scale);
+            var A = parseNumbers(rotation, 'CodageAngulaire').map(x => x * conv.scale);
             var E = new Euler(A[0], A[1], A[2], conv.order);
             M.makeRotationFromEuler(E);
             break;
@@ -192,7 +192,7 @@ function parseExtrinsics(xml) {
         }
     }
 
-    M.setPosition(getVector3(xml, 'Centre'));
+    M.setPosition(parseVector3(xml, 'Centre'));
 
     // go from photogrammetric convention (X right, Y down, Z front) to js conventions (X right, Y up, Z back)
     M.scale(new Vector3(1, -1, -1));
@@ -200,27 +200,21 @@ function parseExtrinsics(xml) {
     return M;
 }
 
-function parseView(xml) {
+function parseOrIntImaM2C(xml) {
     xml = xml.getElementsByTagName('OrIntImaM2C')[0];
     if (!xml) return null;
-    var C = getVector2(xml, 'I00');
-    var X = getVector2(xml, 'V10');
-    var Y = getVector2(xml, 'V01');
+    var C = parseVector2(xml, 'I00');
+    var X = parseVector2(xml, 'V10');
+    var Y = parseVector2(xml, 'V01');
     if (C.x === 0 && C.y === 0 && X.x === 1 && X.y === 0 && Y.x === 0 && Y.y === 1) {
-        return null;
+        return undefined;
     }
-    if (X.y !== 0 || Y.x !== 0) {
-        console.warn('PhotogrammetricCamera does not support non null values for V01[0] and V10[1]');
-    }
-    return {
-        enabled: true,
-        fullWidth: X.x,
-        fullHeight: Y.y,
-        offsetX: -C.x / X.x,
-        offsetY: -C.y / Y.y,
-        width: 1,
-        height: 1,
-    };
+    return new Matrix4().set(
+        X.x, Y.x, 0, C.x,
+        X.y, Y.y, 0, C.y,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+    );
 }
 
 function parseCheck(xml) {
@@ -239,25 +233,20 @@ function parseCheck(xml) {
             return ok;
         }, true);
     }
-    check.epsilon = getNumbers(xml, 'Tol')[0];
+    check.epsilon = parseNumbers(xml, 'Tol')[0];
     check.points = Array.from(xml.getElementsByTagName('Appuis')).map(point => ({
-        id: getNumbers(point, 'Num')[0],
-        p2: getVector2(point, 'Im'),
-        p3: getVector3(point, 'Ter'),
+        id: parseNumbers(point, 'Num')[0],
+        p2: parseVector2(point, 'Im'),
+        p3: parseVector3(point, 'Ter'),
     }));
     return check;
 }
 
 function parseOrientation(xml, intrinsics) {
-    var camera = parseIntrinsics(intrinsics);
-
-    // camera.view = parseView(xml);
-    camera.updateProjectionMatrix();
-
+    var camera = parseIntrinsics(intrinsics, parseOrIntImaM2C(xml));
     camera.matrix = parseExtrinsics(xml);
     camera.matrix.decompose(camera.position, camera.quaternion, camera.scale);
     camera.updateMatrixWorld(true);
-
     camera.check = parseCheck(xml);
     return camera;
 }
@@ -278,11 +267,10 @@ export default {
         }
         // sanity check for format
         xml = xml.getElementsByTagName('OrientationConique')[0];
-        if (!xml) {
-            return undefined;
-        }
-        var file = getText(xml, 'FileInterne');
-        var TypeProj = getText(xml, 'TypeProj');
+        if (!xml) return undefined;
+
+        var file = parseText(xml, 'FileInterne');
+        var TypeProj = parseText(xml, 'TypeProj');
         if (TypeProj !== 'eProjStenope') {
             var error = new Error(`Error parsing micmac orientation : unknown projection type ${TypeProj}`);
             return Promise.reject(error);

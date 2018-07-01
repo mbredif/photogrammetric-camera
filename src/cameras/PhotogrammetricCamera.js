@@ -3,16 +3,17 @@ import {PerspectiveCamera, Vector2, Matrix4} from 'three';
 class PhotogrammetricCamera extends PerspectiveCamera {
     /**
      * @Constructor
-     * @param {number|Vector2} focal - focal length in pixels (default: equal focal length in x and y)
-     * @param {Vector2} size - image size in pixels
-     * @param {Vector2} point - principal point in pixels (default: center)
+     * @param {number|Vector2} focal - focal length in pixels (default: x=1024, y=x)
+     * @param {number|Vector2} size - image size in pixels (default: x=1024, y=x)
+     * @param {Vector2} point - principal point in pixels (default: size/2)
      * @param {number} skew - shear transform parameter (default: 0)
      * @param {Distortion[]} distos - array of distortions, in the order of application used during projection (default: [])
      * @param {number} near - Camera frustum near plane (default: see THREE.PerspectiveCamera).
      * @param {number} far - Camera frustum far plane (default: see THREE.PerspectiveCamera).
-     * @param {number} aspect - aspect ratio of the camera (default: computed from size).
+     * @param {number} aspect - aspect ratio of the camera (default: size.x/size.y).
+     * @param {Matrix4} imageMatrix - an optional perspective post-distortion transform in image space (default: undefined).
      */
-    constructor(focal, size, point, skew, distos, near, far, aspect) {
+    constructor(focal, size, point, skew, distos, near, far, aspect, imageMatrix) {
         focal = Array.isArray(focal) ? new Vector2().fromArray(focal) : (focal || 1024);
         point = Array.isArray(point) ? new Vector2().fromArray(point) : point;
         size = Array.isArray(size) ? new Vector2().fromArray(size) : (size || 1024);
@@ -56,12 +57,14 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         this.preProjectionMatrix = new Matrix4();
         this.postProjectionMatrix = new Matrix4();
         this.textureMatrix = new Matrix4();
+        this.imageMatrix = imageMatrix;
         this.updateProjectionMatrix();
     }
 
     updateProjectionMatrix() {
         if (!this.preProjectionMatrix) {
             // super() calls updateProjectionMatrix(), which is not yet fully initialized
+            super.updateProjectionMatrix();
             return;
         }
 
@@ -73,12 +76,13 @@ class PhotogrammetricCamera extends PerspectiveCamera {
             0, 0, c, d,
             0, 0, -1, 0);
 
-        this.textureMatrix.set(
-            1 / this.view.fullWidth, 0, 0, 0,
-            0, 1 / this.view.fullHeight, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1);
-
+        this.textureMatrix.makeScale(
+            1 / this.view.fullWidth,
+            1 / this.view.fullHeight,
+            1);
+        if (this.imageMatrix) {
+            this.textureMatrix.multiply(this.imageMatrix);
+        }
         var textureAspect = this.view.fullWidth / this.view.fullHeight;
         if (this.view.enabled) {
             textureAspect = this.view.width / this.view.height;

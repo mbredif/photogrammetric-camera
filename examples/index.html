@@ -5,10 +5,6 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
         <style>
-            #help {
-                margin: 50vh;
-                transform: translateY(-50%);
-            }
             ul {
                 list-style-type: none;
             }
@@ -372,6 +368,22 @@
 
                 /* preset scenes */
                 scenes = {
+                    MicMacFilesSamples: function () {
+                        var path = 'https://raw.githubusercontent.com/micmacIGN/Documentation/master/FilesSamples/';
+                        var source = new FetchSource(path);
+                        loadOrientation('Calib-00.xml', source);
+                        loadOrientation('Calib-1.xml', source);
+                        loadOrientation('CalibFrancesco.xml', source);
+                        loadOrientation('NewCalibD3X-mm.xml', source);
+                        loadOrientation('NewCalibD3X-pix.xml', source);
+                        loadOrientation('OriFrancesco.xml', source);
+                        loadOrientation('Orientation-00.xml', source);
+                        loadOrientation('Orientation-1.xml', source);
+                        loadOrientation('Test-NewApero-mm.xml', source);
+                        loadOrientation('Test-NewApero-pix.xml', source);
+                        loadOrientation('TestOri-1.xml', source);
+                        loadOrientation('TestOri-2.xml', source);
+                    },
                     Abbey: function() {
                         var path = 'https://raw.githubusercontent.com/micmacIGN/Documentation/master/NEW-DATA/CompensOnLine/';
                         var source = new FetchSource(path);
@@ -423,8 +435,11 @@
                 cameraGUI.offsetY = cameraGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).name('crop y0').listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.width = cameraGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).name('crop width').listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.height = cameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
-                gui.add(scenes, 'Abbey');
-                gui.add(scenes, 'Maurepas');
+
+                var scenesGUI = gui.addFolder('Scenes');
+                scenesGUI.add(scenes, 'Abbey');
+                scenesGUI.add(scenes, 'Maurepas');
+                scenesGUI.add(scenes, 'MicMacFilesSamples');
                 return gui;
             }
 
