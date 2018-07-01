@@ -1,4 +1,4 @@
-import {PerspectiveCamera, Vector2, Matrix4} from 'three';
+import { PerspectiveCamera, Vector2, Matrix4 } from 'three';
 
 class PhotogrammetricCamera extends PerspectiveCamera {
     /**

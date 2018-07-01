@@ -1,6 +1,10 @@
-import {Vector2, Vector3, Matrix4, Euler} from 'three';
-import PhotogrammetricDistortion from '../cameras/PhotogrammetricDistortion';
-import PhotogrammetricCamera from '../cameras/PhotogrammetricCamera';
+import { Vector2, Vector3, Matrix4, Euler } from 'three';
+import { default as BrownDistortion } from '../cameras/distortions/BrownDistortion';
+import { default as EbnerDistortion } from '../cameras/distortions/EbnerDistortion';
+import { default as FishEyeDistortion } from '../cameras/distortions/FishEyeDistortion';
+import { default as FraserDistortion } from '../cameras/distortions/FraserDistortion';
+import { default as PolynomDistortion } from '../cameras/distortions/PolynomDistortion';
+import { default as RadialDistortion } from '../cameras/distortions/RadialDistortion';
 
 function parseText(xml, tagName) {
     var node = xml.getElementsByTagName(tagName)[0];
@@ -41,7 +45,7 @@ function parseDistortion(xml) {
         case 'ModRad':
             disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
             disto.R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
-            disto.project = PhotogrammetricDistortion.projectRadial;
+            disto.project = RadialDistortion.project;
             return disto;
         case 'eModelePolyDeg2':
         case 'eModelePolyDeg3':
@@ -64,24 +68,24 @@ function parseDistortion(xml) {
                 }
             }
             disto.R = params;
-            disto.project = PhotogrammetricDistortion.projectPolynom;
+            disto.project = PolynomDistortion.project;
             return disto;
         case 'ModPhgrStd':
             disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
             disto.R = parseChildNumbers(xml, 'CoeffDist'); // radial distortion coefficients
             disto.P = parseNumbers(xml, 'P1', [0]).concat(parseNumbers(xml, 'P2', [0]));
             disto.b = parseNumbers(xml, 'b1', [0]).concat(parseNumbers(xml, 'b2', [0]));
-            disto.project = PhotogrammetricDistortion.projectFraser;
+            disto.project = FraserDistortion.project;
             return disto;
         case 'eModeleEbner':
             disto.B2 = states[0] * states[0] / 1.5;
             disto.P = params;
-            disto.project = PhotogrammetricDistortion.projectEbner;
+            disto.project = EbnerDistortion.project;
             return disto;
         case 'eModeleDCBrown':
             disto.F = states[0];
             disto.P = params;
-            disto.project = PhotogrammetricDistortion.projectBrown;
+            disto.project = BrownDistortion.project;
             return disto;
         case 'eModele_FishEye_10_5_5':
         case 'eModele_EquiSolid_FishEye_10_5_5':
@@ -91,7 +95,7 @@ function parseDistortion(xml) {
             disto.P = params.slice(12, 22);
             disto.l = params.slice(22);
             disto.equisolid = disto.type === 'eModele_EquiSolid_FishEye_10_5_5';
-            disto.project = PhotogrammetricDistortion.projectFishEye;
+            disto.project = FishEyeDistortion.project;
             return disto;
         default:
             throw new Error(`Error parsing micmac orientation : unknown distortion ${xml.tagName}`);
