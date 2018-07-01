@@ -1,4 +1,5 @@
-import { Uniform, ShaderMaterial, ShaderLib, ShaderChunk, Matrix4, Color } from 'three';
+import { Uniform, ShaderMaterial, ShaderLib, ShaderChunk, Matrix4, Vector3, Vector4, Color } from 'three';
+import { default as RadialDistortion } from '../cameras/distortions/RadialDistortion';
 
 function pop(options, property, defaultValue) {
     if (options[property] === undefined) return defaultValue;
@@ -33,10 +34,14 @@ ShaderChunk.worldpos_vertex = `
 `
 
 ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
+${RadialDistortion.chunks.radial_pars_fragment}
 #ifdef USE_MAP4
 
-	uniform mat4 uvwTransform;
+	uniform mat4 uvwPreTransform;
+	uniform mat4 uvwPostTransform;
+  uniform RadialDistortion uvDistortion;
   uniform sampler2D map;
+  uniform float borderSharpness;
 
 #endif
 `
@@ -44,12 +49,17 @@ ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
 ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
 #ifdef USE_MAP4
 
-	vec4 uvw= uvwTransform * vec4(vWorldPosition, 1);
+	vec4 uvw = uvwPreTransform * vec4(vWorldPosition, 1);
+  distort_radial(uvw, uvDistortion);
+  uvw = uvwPostTransform * uvw;
   uvw.xyz /= 2. * uvw.w;
-  if (all(lessThan(abs(uvw.xyz),vec3(0.5))))
+  uvw.xyz += vec3(0.5);
+  vec3 border = min(uvw.xyz, 1. - uvw.xyz);
+  if (all(greaterThan(border,vec3(0.))))
   {
-    vec4 color = texture2D(map, 0.5 + uvw.xy);
-    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a);
+    float alpha = min(1., borderSharpness*min(border.x, border.y));
+    vec4 color = texture2D(map, uvw.xy);
+    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a * alpha);
   }
 
 #endif
@@ -72,10 +82,13 @@ class PointsMaterial extends ShaderMaterial {
     constructor(options = {}) {
         const size = pop(options, 'size', 1);
         const diffuse = pop(options, 'color', new Color(0xeeeeee));
-        const uvwTransform = pop(options, 'uvwTransform', new Matrix4());
+        const uvwPreTransform = pop(options, 'uvwPreTransform', new Matrix4());
+        const uvwPostTransform = pop(options, 'uvwPostTransform', new Matrix4());
+        const uvDistortion = pop(options, 'uvDistortion', {R: new Vector4(), C: new Vector3()});
         const map = pop(options, 'map', null);
         const alphaMap = pop(options, 'alphaMap', null);
         const scale = pop(options, 'scale', 1);
+        const borderSharpness = pop(options, 'borderSharpness', 100);
         options.vertexShader = options.vertexShader || ShaderLib.points.vertexShader;
         options.fragmentShader = options.fragmentShader || ShaderLib.points.fragmentShader;
         options.defines = options.defines || {};
@@ -90,11 +103,14 @@ class PointsMaterial extends ShaderMaterial {
         super(options);
         definePropertyUniform(this, 'size', size);
         definePropertyUniform(this, 'diffuse', diffuse);
-        definePropertyUniform(this, 'uvwTransform', uvwTransform);
+        definePropertyUniform(this, 'uvwPreTransform', uvwPreTransform);
+        definePropertyUniform(this, 'uvwPostTransform', uvwPostTransform);
+        definePropertyUniform(this, 'uvDistortion', uvDistortion);
         definePropertyUniform(this, 'opacity', this.opacity);
         definePropertyUniform(this, 'map', map);
         definePropertyUniform(this, 'alphaMap', alphaMap);
         definePropertyUniform(this, 'scale', scale);
+        definePropertyUniform(this, 'borderSharpness', borderSharpness);
     }
 }
 

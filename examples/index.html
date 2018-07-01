@@ -74,6 +74,7 @@
             var scenes;
             var todos = [];
             var plane, sphere;
+            var textureMaterial;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
 
             function init() {
@@ -87,9 +88,14 @@
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
 
-                var backgroundMaterial = new PointsMaterial({ map: uvTexture, side: THREE.DoubleSide });
-                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(500, 32, 32), backgroundMaterial);
-                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), backgroundMaterial);
+                textureMaterial = new PointsMaterial({
+                    map: uvTexture,
+                    size: 2,
+                    vertexColors: THREE.VertexColors,
+                    sizeAttenuation: false
+                });
+                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-500, 32, 32), textureMaterial);
+                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), textureMaterial);
                 viewCamera.add(sphere);
                 scene.add(plane);
 
@@ -137,12 +143,11 @@
                 plyGroup = new THREE.Group();
                 scene.add(plyGroup);
                 var plyParser = new THREE.PLYLoader();
-                var plyMaterial = new PointsMaterial({ size: 2, vertexColors: THREE.VertexColors, sizeAttenuation: false, map: uvTexture});
                 function handlePly(name) {
                     showHelp(false);
                     return function(geometry) {
                         console.log(name);
-                        var points = new THREE.Points( geometry, plyMaterial );
+                        var points = new THREE.Points( geometry, textureMaterial );
                         plyGroup.add( points );
                         geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
@@ -338,11 +343,16 @@
                     console.log('Texture:', camera.name);
                     textureCamera = camera;
                     var texture = textures[camera.name] || uvTexture;
-                    var matrix = plyMaterial.uvwTransform;
-                    matrix.copy(camera.projectionMatrix).multiply(camera.matrixWorldInverse);
-                    backgroundMaterial.uvwTransform.copy(matrix);
-                    plyMaterial.map = texture;
-                    backgroundMaterial.map = texture;
+
+                    textureMaterial.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(camera.matrixWorldInverse);
+                    textureMaterial.uvwPostTransform.copy(camera.postProjectionMatrix);
+                    if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
+                        textureMaterial.uvDistortion = camera.distos[0];
+                    } else {
+                        textureMaterial.uvDistortion = { C: new THREE.Vector2(), R: new THREE.Vector4() };
+                        textureMaterial.uvDistortion.R.w = Infinity;
+                    }
+                    textureMaterial.map = texture;
                 }
 
                 function setCamera(camera) {
@@ -363,8 +373,8 @@
 
                 function keyDown(event) {
                     switch(event.key) {
-                        case '+': plyMaterial.size++; break;
-                        case '-': plyMaterial.size--; break;
+                        case '+': textureMaterial.size++; break;
+                        case '-': textureMaterial.size--; break;
                         case 'ArrowDown': setView(getCamera(nextCamera, -1));  break;
                         case 'ArrowUp': setView(getCamera(nextCamera, +1));  break;
                         case 'ArrowLeft': setTexture(getCamera(textureCamera, -1));  break;
@@ -406,7 +416,7 @@
                         viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
                         textureCamera = viewCamera;
                         gui.updateFromCamera(viewCamera);
-                        backgroundMaterial.map = null;
+                        textureMaterial.map = null;
                         Object.keys(textures).forEach(key => textures[key].dispose());
                         while(cameras.children.length) cameras.remove(cameras.children[0]);
                         while(plyGroup.children.length) plyGroup.remove(plyGroup.children[0]);
@@ -489,9 +499,13 @@
                 scenesGUI.closed = false;
 
                 var backgroundGUI = gui.addFolder('Background');
+                backgroundGUI.add(textureMaterial, 'wireframe');
                 backgroundGUI.add(sphere, 'visible').name('sphere visible');
                 backgroundGUI.add(plane, 'visible').name('plane visible');
-                backgroundGUI.add(plane.position, 'z').name('plane Z');
+                backgroundGUI.add(plane.position, 'z').name('plane Z').listen();
+
+                gui.add(textureMaterial, 'borderSharpness', 0, 300);
+
                 return gui;
             }
 

@@ -1,5 +1,11 @@
 import { PerspectiveCamera, Vector2, Matrix4 } from 'three';
 
+var ndcMatrix = new Matrix4().set(
+    2, 0, 0, -1,
+    0, -2, 0, 1,
+    0, 0, 1, 0,
+    0, 0, 0, 1);
+
 class PhotogrammetricCamera extends PerspectiveCamera {
     /**
      * @Constructor
@@ -97,13 +103,6 @@ class PhotogrammetricCamera extends PerspectiveCamera {
                 0, 0, 0, 1));
         }
 
-        var ndcMatrix = new Matrix4().set(
-            2, 0, 0, -1,
-            0, -2, 0, 1,
-            0, 0, 1, 0,
-            0, 0, 0, 1);
-        this.postProjectionMatrix.multiplyMatrices(ndcMatrix, this.textureMatrix);
-
         // take zoom and aspect into account
         var aspectRatio = this.aspect / textureAspect;
         var zoom = new Vector2(this.zoom, this.zoom);
@@ -112,7 +111,9 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         } else {
             zoom.y *= aspectRatio;
         }
-        this.postProjectionMatrix.premultiply(new Matrix4().makeScale(zoom.x, zoom.y, 1));
+        this.postProjectionMatrix.makeScale(zoom.x, zoom.y, 1);
+        this.postProjectionMatrix.multiply(ndcMatrix);
+        this.postProjectionMatrix.multiply(this.textureMatrix);
 
         // projectionMatrix is provided as an approximation: its usage neglects the effects of distortions
         this.projectionMatrix.multiplyMatrices(this.postProjectionMatrix, this.preProjectionMatrix);

@@ -1,4 +1,4 @@
-import { Vector2, Vector3, Matrix4, Euler } from 'three';
+import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
 import { default as BrownDistortion } from '../cameras/distortions/BrownDistortion';
 import { default as EbnerDistortion } from '../cameras/distortions/EbnerDistortion';
 import { default as FishEyeDistortion } from '../cameras/distortions/FishEyeDistortion';
@@ -43,8 +43,15 @@ function parseDistortion(xml) {
         case 'ModNoDist':
             return undefined;
         case 'ModRad':
-            disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
             disto.R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
+            if(disto.R.length == 0) return undefined;
+            if(disto.R.length > 3) {
+                console.warn('ModRad is currently limited to degrees 3,5,7: Neglecting higher order coefficients.');
+            }
+            disto.R.length = 3;
+            disto.R = new Vector4().fromArray(disto.R);
+            disto.R.w = RadialDistortion.r2max(disto.R);
+            disto.C = parseVector2(xml, 'CDist'); // distortion center in pixels
             disto.project = RadialDistortion.project;
             return disto;
         case 'eModelePolyDeg2':
