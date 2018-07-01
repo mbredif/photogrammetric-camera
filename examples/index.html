@@ -5,24 +5,15 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
         <style>
-            ul {
-                list-style-type: none;
-            }
             body {
-                background-color: #000000;
-                margin: 0px;
                 overflow: hidden;
-                color: white;
-            }
-            a {
-                color: yellow;
             }
         </style>
     </head>
     <body>
         <div id='help'>
             <h1>Image Based Rendering of <a href="https://github.com/micmacIGN">Micmac</a> datasets</h1>
-            <p>You can open Micmac files here using drag and drop :</p>
+            You can open Micmac files here using drag and drop :
             <ul>
                 <li>Images: {name}.jpg files</li>
                 <li>Orientations: Orientation-{name}.{ext}.xml (orientations and images are matched by name)</li>
@@ -30,19 +21,27 @@
                 <li>PointClouds: *.ply (eg the AperiCloud)</li>
             </ul>
 
-            <p>The scene is composed of a large view-centered sphere (500m) and the loaded point clouds if any.</p>
-
-            <p>These are colored by the intrinsic colors of the pointcloud, replaced by the unprojection of the image from the current camera.</p>
-            <p>During camera animation, the image of the target camera is used.</p>
-            <p><img src="data/uv.jpg" width=30px/> Orientations with no images show a blue/red calibration texture. </p>
+            <p>The scene is colored by the intrinsic colors of the pointcloud, replaced by the unprojection of the image from the current texture camera. The scene is composed of :</p>
+            <ul>
+                <li>a large view-centered sphere (500m)</li>
+                <li>an horizontal plane at a given absolute altitude</li>
+                <li>the loaded point clouds if any.</li>
+            </ul>
+            <p><img src="data/uv.jpg" width=30px/> An orientation with no image loaded shows this calibration texture by default. </p>
 
             <p>Keyboard Actions :</p>
             <ul>
-                <li>b/n: move to previous/next image</li>
-                <li>-/+: decrease/increase point size</li>
+                <li>&darr;/&uarr;: move the view camera to the previous/next image</li>
+                <li>&larr;/&rarr;: move the texture camera to the previous/next image</li>
+                <li>PageDown/PageUp: move both the texture and the view cameras to the previous/next image</li>
+                <li>t: set the texture camera to the current view camera</li>
+                <li>v: set the view camera to the current texture camera</li>
+                <li>-/+: decrease/increase the point size</li>
                 <li>c: print the current camera in the console</li>
+                <li>p: print the current camera position in the console</li>
+                <li>h: show/hide the GUI</li>
             </ul>
-            Mathieu Brédif (<a href="http://recherche.ign.fr/labos/matis/~bredif">IGN ENSG, Lastig/Geovis, Univ. Paris Est</a>, <a href="http://github.com/mbredif">github</a>)
+            Mathieu Brédif (<a href="http://recherche.ign.fr/labos/matis/~bredif">IGN ENSG, Lastig/Geovis, Univ. Paris Est</a>, <a href="http://github.com/mbredif/three-photogrammetric-camera">github</a>)
         </div>
         <script src="dist/three-photogrammetric-camera.js"></script>
         <script>
@@ -65,26 +64,30 @@
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
             var nextCamera = new PhotogrammetricCamera();
+            var textureCamera = viewCamera;
             var duration = 0.3;
             var useCustomCameraHelper = true;
             var scenes;
             var todos = [];
+            var plane, sphere;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
 
             function init() {
                 var container = document.createElement( 'div' );
                 document.body.appendChild( container );
                 scene = new THREE.Scene();
-                viewCamera.name = 'view';
                 cameras = new THREE.Group();
                 cameras.visible = false;
                 scene.add(cameras);
                 scene.add(viewCamera);
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
-                var sphereMaterial = new PointsMaterial({ map: uvTexture, side: THREE.DoubleSide });
-                var sphere = new THREE.Mesh(new THREE.SphereBufferGeometry( 500, 32, 32 ), sphereMaterial);
+
+                var backgroundMaterial = new PointsMaterial({ map: uvTexture, side: THREE.DoubleSide });
+                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(500, 32, 32), backgroundMaterial);
+                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), backgroundMaterial);
                 viewCamera.add(sphere);
+                scene.add(plane);
 
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
@@ -157,7 +160,8 @@
                         texture.name = match ? match[1] : name;
                         textures[texture.name] = texture;
                         if (texMaterials[texture.name]) texMaterials[texture.name].map = texture;
-                        setCamera(cameras.getObjectByName(texture.name));
+                        const camera = cameras.getObjectByName(texture.name);
+                        setCamera(camera);
                     };
                 }
 
@@ -315,24 +319,37 @@
                 document.addEventListener('drop',  addFiles, false);
 
                 /* Keyboard events */
-                function setCamera(camera) {
+                function setView(camera) {
                     if (!camera) return;
-                    console.log(camera.name);
+                    console.log('View:', camera.name);
                     prevCamera.set(viewCamera);
                     nextCamera.set(camera);
                     prevCamera.timestamp = 0; // timestamp will be set in the update callback
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
-                    plyMaterial.uvwTransform.copy(camera.projectionMatrix).multiply(camera.matrixWorldInverse);
-                    plyMaterial.map = textures[camera.name] || uvTexture;
-                    sphereMaterial.uvwTransform.copy(plyMaterial.uvwTransform);
-                    sphereMaterial.map = plyMaterial.map;
                 }
 
-                function setCameraByDeltaIndex(delta) {
-                    const array = cameras.children;
-                    const index = array.findIndex(camera => camera.name == nextCamera.name);
-                    setCamera(array[(index + delta + array.length) %  array.length]);
+                function setTexture(camera, notmat) {
+                    if (!camera) return;
+                    console.log('Texture:', camera.name);
+                    textureCamera = camera;
+                    var texture = textures[camera.name] || uvTexture;
+                    var matrix = plyMaterial.uvwTransform;
+                    matrix.copy(camera.projectionMatrix).multiply(camera.matrixWorldInverse);
+                    backgroundMaterial.uvwTransform.copy(matrix);
+                    plyMaterial.map = texture;
+                    backgroundMaterial.map = texture;
+                }
+
+                function setCamera(camera) {
+                    setView(camera);
+                    setTexture(camera);
+                }
+
+                function getCamera(camera, delta = 0) {
+                  const array = cameras.children;
+                  const index = array.findIndex(cam => cam.name == camera.name);
+                  return array[(index + delta + array.length) %  array.length];
                 }
 
                 function loadOrientedImage(orientationUrl, imageUrl, source) {
@@ -344,10 +361,17 @@
                     switch(event.key) {
                         case '+': plyMaterial.size++; break;
                         case '-': plyMaterial.size--; break;
-                        case 'b': setCameraByDeltaIndex(-1);  break;
-                        case 'n': setCameraByDeltaIndex(+1);  break;
-                        case 'c': console.log(viewCamera); break;
-                        default : console.log(event.key);
+                        case 'ArrowDown': setView(getCamera(nextCamera, -1));  break;
+                        case 'ArrowUp': setView(getCamera(nextCamera, +1));  break;
+                        case 'ArrowLeft': setTexture(getCamera(textureCamera, -1));  break;
+                        case 'ArrowRight': setTexture(getCamera(textureCamera, +1));  break;
+                        case 'PageDown': setCamera(getCamera(nextCamera, -1));  break;
+                        case 'PageUp': setCamera(getCamera(nextCamera, +1));  break;
+                        case 't': setTexture(getCamera(nextCamera));  break;
+                        case 'v': setView(getCamera(textureCamera));  break;
+                        case 'c': console.log(nextCamera); break;
+                        case 'p': console.log(viewCamera.position); break;
+                        default : console.log(event.key, 'is not supported');
                     }
                 }
                 document.addEventListener('keydown', keyDown, false);
@@ -368,6 +392,22 @@
 
                 /* preset scenes */
                 scenes = {
+                    Clear: function() {
+                        todos.length = 0;
+                        const camera = new PhotogrammetricCamera();
+                        prevCamera.set(camera);
+                        viewCamera.set(camera);
+                        nextCamera.set(camera);
+                        nextCamera.timestamp = undefined;
+                        viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
+                        textureCamera = viewCamera;
+                        gui.updateFromCamera(viewCamera);
+                        backgroundMaterial.map = null;
+                        Object.keys(textures).forEach(key => textures[key].dispose());
+                        while(cameras.children.length) cameras.remove(cameras.children[0]);
+                        while(plyGroup.children.length) plyGroup.remove(plyGroup.children[0]);
+                        showHelp(true);
+                    },
                     MicMacFilesSamples: function () {
                         var path = 'https://raw.githubusercontent.com/micmacIGN/Documentation/master/FilesSamples/';
                         var source = new FetchSource(path);
@@ -391,25 +431,29 @@
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0205.jpg.xml', 'Abbey-IMG_0205.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0206.jpg.xml', 'Abbey-IMG_0206.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
+                        plane.position.z = -15;
                     },
                     Maurepas: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=dias/', 'maurepas.json');
+                        plane.position.z = 80.4;
                     },
+                    /*
+                     TODO
                     Chambord: function() {
-                        // TODO
-                        // var source = new FetchSource('Chambord/');
-                        // loadFileImSel('Ori-MEP_FNE/', source);
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
-                        // loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
+                        var source = new FetchSource('Chambord/');
+                        loadFileImSel('Ori-MEP_FNE/', source);
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
+                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
                     }
+                    */
                 }
             }
 
@@ -437,9 +481,13 @@
                 cameraGUI.height = cameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
 
                 var scenesGUI = gui.addFolder('Scenes');
-                scenesGUI.add(scenes, 'Abbey');
-                scenesGUI.add(scenes, 'Maurepas');
-                scenesGUI.add(scenes, 'MicMacFilesSamples');
+                for(const key in scenes) scenesGUI.add(scenes, key);
+                scenesGUI.closed = false;
+
+                var backgroundGUI = gui.addFolder('Background');
+                backgroundGUI.add(sphere, 'visible').name('sphere visible');
+                backgroundGUI.add(plane, 'visible').name('plane visible');
+                backgroundGUI.add(plane.position, 'z').name('plane Z');
                 return gui;
             }
 
@@ -471,6 +519,8 @@
                     viewCamera.updateProjectionMatrix();
                     gui.updateFromCamera(viewCamera);
                 }
+                plane.position.x = viewCamera.position.x;
+                plane.position.y = viewCamera.position.y;
                 // orbitControls.update();
                 requestAnimationFrame(animate);
                 render();

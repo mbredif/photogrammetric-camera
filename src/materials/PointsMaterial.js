@@ -49,7 +49,7 @@ ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
   if (all(lessThan(abs(uvw.xyz),vec3(0.5))))
   {
     vec4 color = texture2D(map, 0.5 + uvw.xy);
-    diffuseColor.rgb = color.rgb; // mix(diffuseColor.rgb, color.rgb, color.a);
+    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a);
   }
 
 #endif
