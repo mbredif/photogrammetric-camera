@@ -60,9 +60,9 @@
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
-        <!-- <script src="js/OrbitControls.js"></script> -->
+        <script src="js/OrbitControls.js"></script>
         <script>
-            // var orbitTarget, orbitControls;
+            var orbitTarget, orbitControls;
             var scene, renderer, plyGroup, cameras;
             var textureMaterial, wireMaterial, viewMaterialOptions = {}, viewMaterials = {};
             var textures = {};
@@ -126,26 +126,13 @@
 
                 window.addEventListener( 'resize', onWindowResize, false );
 
-/*
+
                 // controls
                 orbitControls = new THREE.OrbitControls( viewCamera, renderer.domElement );
-                orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
-                orbitControls.dampingFactor = 0.25;
+                orbitControls.enableDamping = false;
                 orbitControls.screenSpacePanning = false;
                 orbitControls.maxPolarAngle = 0.75 * Math.PI;
-                orbitControls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
-                var sum = new THREE.Vector3(0, 0, 0);
-                var Nsum = 0;
-                function updateOrbitTarget(position, delta) {
-                    delta = delta || new THREE.Vector3(10,10,10);
-                    sum.add(position);
-                    Nsum++;
-                    orbitControls.target.copy(sum).divideScalar(Nsum);
-                    orbitControls.object.position.copy(orbitControls.target).add(delta);
-                    orbitControls.saveState();
-                }
-                */
-
+                orbitControls.enableKeys = false;
 
                 /* Ply loading */
                 plyGroup = new THREE.Group();
@@ -161,7 +148,6 @@
                         var center = new THREE.Vector3();
                         geometry.boundingBox.getCenter(center);
                         points.updateMatrixWorld(true);
-                        // updateOrbitTarget(points.localToWorld(center));
                     };
                 }
                 function loadPly(url) {
@@ -215,11 +201,9 @@
                         new THREE.Vector3( -1,  1, -1 ).applyMatrix4(m).toArray(vertices,  6);
                         new THREE.Vector3(  1,  1, -1 ).applyMatrix4(m).toArray(vertices,  9);
                         new THREE.Vector3(  1, -1, -1 ).applyMatrix4(m).toArray(vertices, 12);
-                        var uvs = new Float32Array( [-1, -1,  0, 0,  0, 1,  1, 1,  1, 0] );
                         var indices = [ 0, 1, 2,  0, 2, 3,  0, 3, 4,  0, 4, 1,  1, 3, 2,  1, 4, 3 ];
                         geometry.setIndex( indices );
                         geometry.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-                        geometry.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
                         geometry.addGroup(0, 12, 0);
                         geometry.addGroup(12, 6, 1);
 
@@ -266,7 +250,6 @@
                         cameras.add(camera);
                         cameras.children.sort((a, b) => a.name.localeCompare(b.name));
                         setCamera(camera);
-                        // updateOrbitTarget(camera.position);
                         return camera;
                     };
                 }
@@ -304,6 +287,7 @@
                         if (json.plane) {
                             const position = json.plane.position;
                             if (position && position.z !== undefined) plane.position.z = position.z;
+                            orbitControls.target.set(0, 0, plane.position.z);
                         }
                         json.ply.forEach(url => todos.push(() => loadPly(source.path + url)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
@@ -379,6 +363,7 @@
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     setMaterial(viewMaterials[camera.name], camera);
                     onWindowResize();
+                    orbitControls.enabled = false;
                 }
 
                 function setTexture(camera) {
@@ -478,10 +463,12 @@
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0205.jpg.xml', 'Abbey-IMG_0205.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0206.jpg.xml', 'Abbey-IMG_0206.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
-                        plane.position.z = -16.56
+                        plane.position.z = -16.56;
+                        orbitControls.target.set(0, 0, plane.position.z);
                     },
                     Maurepas: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/maurepas/');
+                        // orbitControls is broken here
                     },
                     Ramses: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/ramses/');
@@ -561,7 +548,6 @@
                     todos.shift()();
                     todoTimestamp = timestamp + 1000;
                 }
-
                 if (prevCamera.timestamp !== undefined) {
                     if (prevCamera.timestamp == 0) {
                         prevCamera.timestamp = timestamp;
@@ -574,6 +560,8 @@
                       viewCamera.set(nextCamera);
                       prevCamera.timestamp = undefined;
                       nextCamera.timestamp = undefined;
+                      orbitControls.saveState();
+                      orbitControls.enabled = true;
                     }
                     viewCamera.far = 10000;
                     viewCamera.updateProjectionMatrix();
@@ -583,7 +571,6 @@
                     viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
                 plane.position.x = viewCamera.position.x;
                 plane.position.y = viewCamera.position.y;
-                // orbitControls.update();
                 requestAnimationFrame(animate);
                 render();
 
