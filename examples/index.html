@@ -17,7 +17,8 @@
     <body>
         <div id='help'>
             <h1>Image Based Rendering of <a href="https://github.com/micmacIGN">Micmac</a> datasets</h1>
-            You can open Micmac files here using drag and drop :
+            <form onsubmit="return onFilesSubmit(this)"><input id="files" type="file" multiple><input type="submit"></form>
+            You can open Micmac files here using drag and drop or here
             <ul>
                 <li>Images: {name}.jpg files</li>
                 <li>Orientations: Orientation-{name}.{ext}.xml (orientations and images are matched by name)</li>
@@ -61,9 +62,9 @@
         <script src="js/PLYLoader.js"></script>
         <!-- <script src="js/OrbitControls.js"></script> -->
         <script>
-            var orbitTarget, orbitControls;
-            var scene, renderer, plyGroup, cameras, texMaterial, wireMaterial;
-            var texMaterials = {};
+            // var orbitTarget, orbitControls;
+            var scene, renderer, plyGroup, cameras;
+            var textureMaterial, wireMaterial, viewMaterialOptions = {}, viewMaterials = {};
             var textures = {};
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
@@ -74,8 +75,13 @@
             var scenes;
             var todos = [];
             var plane, sphere;
-            var textureMaterial;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
+
+            var addFiles;
+            function onFilesSubmit(form) {
+                addFiles(form.files.files);
+                return false;
+            }
 
             function init() {
                 var container = document.createElement( 'div' );
@@ -92,7 +98,8 @@
                     map: uvTexture,
                     size: 2,
                     vertexColors: THREE.VertexColors,
-                    sizeAttenuation: false
+                    sizeAttenuation: false,
+                    blending: THREE.NormalBlending,
                 });
                 sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-500, 32, 32), textureMaterial);
                 plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), textureMaterial);
@@ -101,11 +108,12 @@
 
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
-                texMaterial = new THREE.MeshBasicMaterial();
-                texMaterial.opacity = 0.2;
-                texMaterial.transparent = true;
-                texMaterial.blending = THREE.NormalBlending;
-                texMaterial.map = uvTexture;
+                viewMaterialOptions = {
+                    map: uvTexture,
+                    opacity: 1,
+                    transparent: true,
+                    blending: THREE.NormalBlending,
+                };
 
                 // renderer
 
@@ -168,7 +176,6 @@
                         const match = name.match(/(.*)\.[\w\d]/i);
                         texture.name = match ? match[1] : name;
                         textures[texture.name] = texture;
-                        if (texMaterials[texture.name]) texMaterials[texture.name].map = texture;
                         const camera = cameras.getObjectByName(texture.name);
                         setCamera(camera);
                     };
@@ -201,9 +208,9 @@
                         geometry.addGroup(0, 12, 0);
                         geometry.addGroup(12, 6, 1);
 
-                        texMaterials[camera.name] = texMaterial.clone();
-                        texMaterials[camera.name].map = textures[camera.name] || uvTexture;
-                        var mesh = new THREE.Mesh( geometry, [wireMaterial, texMaterials[camera.name]] );
+                        viewMaterials[camera.name] = new PointsMaterial(viewMaterialOptions);
+                        viewMaterials[camera.name].map = textures[camera.name] || uvTexture;
+                        var mesh = new THREE.Mesh( geometry, [wireMaterial, viewMaterials[camera.name]] );
                         mesh.scale.set(10, 10, 10);
                         group.add(mesh);
                     }
@@ -284,12 +291,12 @@
                     });
                 }
 
-                /* Drag and drop events */
-                function addFiles(event) {
-                    event.stopPropagation();
-                    event.preventDefault();
+                function showHelp(show) {
+                    document.getElementById( 'help' ).style.display = show ? 'block' : 'none';
+                }
 
-                    var files = (event.dataTransfer || window.dataTransfer).files;
+                addFiles = function(files) {
+                    showHelp(false);
                     var source = new FilesSource(files);
                     // iterate over files
                     for(var i = 0; i < files.length; ++i) {
@@ -313,19 +320,34 @@
                             default:
                         }
                     }
-                }
+                };
 
-                function showHelp(show) {
-                    document.getElementById( 'help' ).style.display = show ? 'block' : 'none';
-                }
+                /* Drag and drop events */
                 function prevDefault(event){
                     showHelp(false);
                     event.preventDefault();
                 }
+                function addFilesDrag(event) {
+                    prevDefault(event);
+                    addFiles((event.dataTransfer || window.dataTransfer).files);
+                }
                 document.addEventListener('dragenter', prevDefault, false);
                 document.addEventListener('dragover', prevDefault, false);
                 document.addEventListener('dragleave', prevDefault, false);
-                document.addEventListener('drop',  addFiles, false);
+                document.addEventListener('drop',  addFilesDrag, false);
+
+
+                function setMaterial(material, camera) {
+                    material.map = textures[camera.name] || uvTexture;
+                    material.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(camera.matrixWorldInverse);
+                    material.uvwPostTransform.copy(camera.postProjectionMatrix);
+                    if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
+                        material.uvDistortion = camera.distos[0];
+                    } else {
+                        material.uvDistortion = { C: new THREE.Vector2(), R: new THREE.Vector4() };
+                        material.uvDistortion.R.w = Infinity;
+                    }
+                }
 
                 /* Keyboard events */
                 function setView(camera) {
@@ -335,24 +357,15 @@
                     nextCamera.set(camera);
                     prevCamera.timestamp = 0; // timestamp will be set in the update callback
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
+                    setMaterial(viewMaterials[camera.name], camera);
                     onWindowResize();
                 }
 
-                function setTexture(camera, notmat) {
+                function setTexture(camera) {
                     if (!camera) return;
                     console.log('Texture:', camera.name);
                     textureCamera = camera;
-                    var texture = textures[camera.name] || uvTexture;
-
-                    textureMaterial.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(camera.matrixWorldInverse);
-                    textureMaterial.uvwPostTransform.copy(camera.postProjectionMatrix);
-                    if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
-                        textureMaterial.uvDistortion = camera.distos[0];
-                    } else {
-                        textureMaterial.uvDistortion = { C: new THREE.Vector2(), R: new THREE.Vector4() };
-                        textureMaterial.uvDistortion.R.w = Infinity;
-                    }
-                    textureMaterial.map = texture;
+                    setMaterial(textureMaterial, camera);
                 }
 
                 function setCamera(camera) {
@@ -448,7 +461,7 @@
                         plane.position.z = -15;
                     },
                     Maurepas: function() {
-                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=dias/', 'maurepas.json');
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/maurepas/', 'maurepas.json');
                         plane.position.z = 80.4;
                     },
                     /*
@@ -485,6 +498,7 @@
                     cameraGUI.height.max(camera.view.fullHeight);
                 };
                 cameraGUI.visible = cameraGUI.add(cameras, 'visible');
+                cameraGUI.opacity = cameraGUI.add(viewMaterialOptions, 'opacity', 0, 1);
                 cameraGUI.near = cameraGUI.add(viewCamera, 'near', 0, 10).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 100).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.zoom = cameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
@@ -537,6 +551,8 @@
                     viewCamera.updateProjectionMatrix();
                     gui.updateFromCamera(viewCamera);
                 }
+                if (viewMaterials[nextCamera.name])
+                    viewMaterials[nextCamera.name].opacity = viewMaterialOptions.opacity;
                 plane.position.x = viewCamera.position.x;
                 plane.position.y = viewCamera.position.y;
                 // orbitControls.update();
