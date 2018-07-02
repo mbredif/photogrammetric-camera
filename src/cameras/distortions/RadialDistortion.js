@@ -88,9 +88,10 @@ float polynom(vec3 R, float r2) {
 }
 
 void distort_radial(inout vec4 p, RadialDistortion disto) {
-  vec2 r = p.xy - p.w * disto.C;
-  float r2 = dot(r, r) / (p.w * p.w);
-  if (r2 > disto.R.w) p.z = 2. * p.w; // to be culled
+  p /= p.w;
+  vec2 r = p.xy - disto.C;
+  float r2 = dot(r, r);
+  if (r2 > disto.R.w) p.z = 2.; // to be culled
   p.xy += polynom(disto.R.xyz, r2) * r;
 }
 `,
