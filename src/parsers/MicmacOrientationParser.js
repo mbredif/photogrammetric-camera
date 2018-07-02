@@ -43,14 +43,15 @@ function parseDistortion(xml) {
         case 'ModNoDist':
             return undefined;
         case 'ModRad':
-            disto.R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
-            if(disto.R.length == 0) return undefined;
-            if(disto.R.length > 3) {
+            const R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
+            if(R.length == 0) return undefined;
+            if(R.length > 3) {
                 console.warn('ModRad is currently limited to degrees 3,5,7: Neglecting higher order coefficients.');
             }
-            disto.R.length = 3;
-            disto.R = new Vector4().fromArray(disto.R);
-            disto.R.w = RadialDistortion.r2max(disto.R);
+            R[1] = R[1] || 0;
+            R[2] = R[2] || 0;
+            R[3] = RadialDistortion.r2max(R);
+            disto.R = new Vector4().fromArray(R);
             disto.C = parseVector2(xml, 'CDist'); // distortion center in pixels
             disto.project = RadialDistortion.project;
             return disto;
@@ -288,7 +289,7 @@ export default {
         }
 
         if (file) {
-            return source.read(file, 'text').then(intrinsics => parseOrientation(xml, intrinsics));
+            return source.open(file, 'text').then(intrinsics => parseOrientation(xml, intrinsics));
         } else {
             var intrinsics = xml.getElementsByTagName('Interne')[0];
             return Promise.resolve(parseOrientation(xml, intrinsics));

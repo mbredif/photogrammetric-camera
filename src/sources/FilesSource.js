@@ -28,11 +28,13 @@ class FilesSource {
         this.decode = options.decode || decode;
     }
 
-    read(url, type) {
+    open(url, type) {
         url = this.path(url);
         const file = this.files[url];
         return file ? this.decode(file, type) : Promise.reject(new Error(`file not found: ${url}`));
     }
+
+    close(url, type) {}
 }
 
 export default FilesSource;

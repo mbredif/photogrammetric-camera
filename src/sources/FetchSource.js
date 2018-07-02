@@ -1,4 +1,5 @@
 const fetch = window.fetch.bind(window);
+const URL = window.URL || window.webkitURL;
 
 function decode(response, type) {
     if (!response.ok) {
@@ -9,7 +10,7 @@ function decode(response, type) {
     switch(type) {
         case 'text': return response.text();
         case 'arrayBuffer': return response.arrayBuffer();
-        // case 'dataURL': return response.blob();
+        case 'dataURL': return response.blob().then(URL.createObjectURL);
         default: console.error('unknown decode type', type);
     }
 }
@@ -31,9 +32,13 @@ class FetchSource {
         this.decode = options.decode || decode;
     }
 
-    read(url, type) {
+    open(url, type) {
         return this.fetch(this.path + url, this.fetchOptions)
             .then(response => this.decode(response, type));
+    }
+
+    close(url, type) {
+        if (type === 'dataURL') URL.revokeObjectURL(url);
     }
 }
 

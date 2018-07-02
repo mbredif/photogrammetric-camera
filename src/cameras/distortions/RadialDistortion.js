@@ -56,7 +56,7 @@ function r2max(R)
 {
     // returned the square of the smallest positive root of the derivative of the distorsion polynomial
     // which tells where the distorsion might no longer be bijective.
-    var roots = cardan_cubic_roots(7 * R.z, 5 * R.y, 3 * R.x, 1);
+    var roots = cardan_cubic_roots(7 * R[2], 5 * R[1], 3 * R[0], 1);
     var imax = -1;
     for (var i in roots) if (roots[i] > 0 && (imax == -1 || roots[imax] > roots[i])) imax = i;
     if (imax == -1) return Infinity; // no roots : all is valid !

@@ -171,18 +171,33 @@
                 /* Image loading */
                 function handleImage(name) {
                     showHelp(false);
-                    return function(url) {
-                        var texture = textureLoader.load(url);
-                        const match = name.match(/(.*)\.[\w\d]/i);
+                    return function(texture) {
+                        if (!texture) return;
+                        const match = name.match(/([^\/]*)\.[\w\d]/i);
                         texture.name = match ? match[1] : name;
                         textures[texture.name] = texture;
                         const camera = cameras.getObjectByName(texture.name);
                         setCamera(camera);
+                        return texture;
                     };
                 }
 
-                function loadImage(name, url) {
-                    handleImage(name)(url);
+                function parseImage(source) {
+                    return function(dataURL) {
+                        return new Promise((resolve, reject) => {
+                            const finalize = (texture) => {
+                                source.close(dataURL, 'dataURL');
+                                resolve(texture);
+                            };
+                            textureLoader.load(dataURL, finalize, undefined, reject)
+                        });
+                    }
+                }
+
+                function loadImage(name, source) {
+                      return source.open(name, 'dataURL')
+                      .then(parseImage(source))
+                      .then(handleImage(name));
                 }
 
                 /* Orientation loading */
@@ -268,13 +283,13 @@
                 }
 
                 function loadOrientation(name, source) {
-                    return source.read(name, 'text')
+                    return source.open(name, 'text')
                         .then(parseOrientation(source))
                         .then(handleOrientation(name));
                 }
 
                 function loadFileImSel(dir, source) {
-                    source.read(dir+'FileImSel.xml', 'text').then((xml) => {
+                    source.open(dir+'FileImSel.xml', 'text').then((xml) => {
                         xml = new window.DOMParser().parseFromString(xml, 'text/xml');
                         var names = Array.from(xml.getElementsByTagName('Name'));
                         names.forEach(name => loadOrientation(dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', source));
@@ -282,10 +297,14 @@
                 }
 
                 function loadJSON(path, file) {
+                    file = file || 'index.json';
                     var source = new FetchSource(path);
-                    source.read(file, 'text').then((json) => {
+                    source.open(file, 'text').then((json) => {
                         json = JSON.parse(json);
-                        source.path = json.url;
+                        if (json.plane) {
+                            const position = json.plane.position;
+                            if (position && position.z !== undefined) plane.position.z = position.z;
+                        }
                         json.ply.forEach(url => todos.push(() => loadPly(source.path + url)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
                     });
@@ -316,6 +335,7 @@
                                 break;
                             case 'jpg':
                                 source.decode(file, 'dataURL')
+                                .then(parseImage(source))
                                 .then(handleImage(name));
                             default:
                         }
@@ -374,14 +394,13 @@
                 }
 
                 function getCamera(camera, delta = 0) {
-                  const array = cameras.children;
-                  const index = array.findIndex(cam => cam.name == camera.name);
-                  return array[(index + delta + array.length) %  array.length];
+                    const array = cameras.children;
+                    const index = array.findIndex(cam => cam.name == camera.name);
+                    return array[(index + delta + array.length) %  array.length];
                 }
 
                 function loadOrientedImage(orientationUrl, imageUrl, source) {
-                  loadOrientation(orientationUrl, source)
-                  .then(camera => camera && loadImage(camera.name, source.path + imageUrl));
+                    loadImage(imageUrl, source).then(() => loadOrientation(orientationUrl, source));
                 }
 
                 function keyDown(event) {
@@ -434,6 +453,7 @@
                         while(cameras.children.length) cameras.remove(cameras.children[0]);
                         while(plyGroup.children.length) plyGroup.remove(plyGroup.children[0]);
                         showHelp(true);
+                        plane.position.z = 0;
                     },
                     MicMacFilesSamples: function () {
                         var path = 'https://raw.githubusercontent.com/micmacIGN/Documentation/master/FilesSamples/';
@@ -458,11 +478,19 @@
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0205.jpg.xml', 'Abbey-IMG_0205.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0206.jpg.xml', 'Abbey-IMG_0206.jpg', source);
                         loadOrientedImage('Ori-Rel/Orientation-Abbey-IMG_0207.jpg.xml', 'Abbey-IMG_0207.jpg', source);
-                        plane.position.z = -15;
+                        plane.position.z = -16.56
                     },
                     Maurepas: function() {
-                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/maurepas/', 'maurepas.json');
-                        plane.position.z = 80.4;
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/maurepas/');
+                    },
+                    Ramses: function() {
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/ramses/');
+                    },
+                    Cuxa: function() {
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/cuxa/');
+                    },
+                    Viabon: function() {
+                        loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
                     },
                     /*
                      TODO
@@ -516,9 +544,9 @@
                 backgroundGUI.add(textureMaterial, 'wireframe');
                 backgroundGUI.add(sphere, 'visible').name('sphere visible');
                 backgroundGUI.add(plane, 'visible').name('plane visible');
-                backgroundGUI.add(plane.position, 'z').name('plane Z').listen();
+                backgroundGUI.add(plane.position, 'z', -100, 100, 0.01).name('plane Z').listen();
 
-                gui.add(textureMaterial, 'borderSharpness', 0, 300);
+                gui.add(textureMaterial, 'borderSharpness', 2, 200);
 
                 return gui;
             }
@@ -552,7 +580,7 @@
                     gui.updateFromCamera(viewCamera);
                 }
                 if (viewMaterials[nextCamera.name])
-                    viewMaterials[nextCamera.name].opacity = viewMaterialOptions.opacity;
+                    viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
                 plane.position.x = viewCamera.position.x;
                 plane.position.y = viewCamera.position.y;
                 // orbitControls.update();
