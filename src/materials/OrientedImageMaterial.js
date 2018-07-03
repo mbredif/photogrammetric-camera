@@ -36,19 +36,21 @@ ShaderChunk.worldpos_vertex = `
 ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
 ${RadialDistortion.chunks.radial_pars_fragment}
 #ifdef USE_MAP4
-
 	uniform mat4 uvwPreTransform;
 	uniform mat4 uvwPostTransform;
   uniform RadialDistortion uvDistortion;
   uniform sampler2D map;
   uniform float borderSharpness;
-
+  uniform bool diffuseColorGrey;
 #endif
 `
 
 ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
-#ifdef USE_MAP4
+  if (diffuseColorGrey) {
+    diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.333333)));
+  }
 
+#ifdef USE_MAP4
 	vec4 uvw = uvwPreTransform * vec4(vWorldPosition, 1);
   distort_radial(uvw, uvDistortion);
   uvw = uvwPostTransform * uvw;
@@ -57,11 +59,10 @@ ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
   vec3 border = min(uvw.xyz, 1. - uvw.xyz);
   if (all(greaterThan(border,vec3(0.))))
   {
-    float alpha = min(1., borderSharpness*min(border.x, border.y));
     vec4 color = texture2D(map, uvw.xy);
-    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a * alpha);
+    color.a *= min(1., borderSharpness*min(border.x, border.y));
+    diffuseColor.rgb = mix(diffuseColor.rgb, color.rgb, color.a);
   }
-
 #endif
 `
 
@@ -89,6 +90,7 @@ class OrientedImageMaterial extends ShaderMaterial {
         const alphaMap = pop(options, 'alphaMap', null);
         const scale = pop(options, 'scale', 1);
         const borderSharpness = pop(options, 'borderSharpness', 100);
+        const diffuseColorGrey = pop(options, 'diffuseColorGrey', true);
         options.vertexShader = options.vertexShader || ShaderLib.points.vertexShader;
         options.fragmentShader = options.fragmentShader || ShaderLib.points.fragmentShader;
         options.defines = options.defines || {};
@@ -111,6 +113,7 @@ class OrientedImageMaterial extends ShaderMaterial {
         definePropertyUniform(this, 'alphaMap', alphaMap);
         definePropertyUniform(this, 'scale', scale);
         definePropertyUniform(this, 'borderSharpness', borderSharpness);
+        definePropertyUniform(this, 'diffuseColorGrey', diffuseColorGrey);
     }
 }
 

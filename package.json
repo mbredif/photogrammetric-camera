@@ -22,7 +22,7 @@
   "author": "Mathieu Brédif",
   "license": "(CECILL-B OR MIT)",
   "devDependencies": {
-    "gh-pages-deploy": "^0.4.2",
+    "gh-pages-deploy": "git+https://github.com/mbredif/gh-pages-deploy",
     "three": "^0.89.0",
     "webpack": "^4.1.1",
     "webpack-cli": "^2.0.15",

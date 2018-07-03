@@ -538,6 +538,7 @@
                 backgroundGUI.add(plane.position, 'z', -100, 100, 0.01).name('plane Z').listen();
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
+                gui.add(textureMaterial, 'diffuseColorGrey');
 
                 return gui;
             }
@@ -548,9 +549,10 @@
 
             var todoTimestamp = 0;
             function animate(timestamp) {
+                requestAnimationFrame(animate);
                 if (todos.length && timestamp > todoTimestamp) {
                     todos.shift()();
-                    todoTimestamp = timestamp + 1000;
+                    todoTimestamp = timestamp + 200;
                 }
                 if (prevCamera.timestamp !== undefined) {
                     if (prevCamera.timestamp == 0) {
@@ -575,9 +577,8 @@
                     viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
                 plane.position.x = viewCamera.position.x;
                 plane.position.y = viewCamera.position.y;
-                requestAnimationFrame(animate);
-                render();
 
+                render();
             }
 
 
