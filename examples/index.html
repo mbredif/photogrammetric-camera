@@ -76,6 +76,7 @@
             var todos = [];
             var plane, sphere;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
+            viewCamera.up.set(0, 0, 1);
 
             var addFiles;
             function onFilesSubmit(form) {
@@ -288,6 +289,9 @@
                             const position = json.plane.position;
                             if (position && position.z !== undefined) plane.position.z = position.z;
                             orbitControls.target.set(0, 0, plane.position.z);
+                        }
+                        if (json.target) {
+                            orbitControls.target.copy(json.target);
                         }
                         json.ply.forEach(url => todos.push(() => loadPly(source.path + url)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
