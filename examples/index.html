@@ -56,7 +56,7 @@
             var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
             var FetchSource = ThreePhotogrammetricCamera.FetchSource;
             var FilesSource = ThreePhotogrammetricCamera.FilesSource;
-            var PointsMaterial = ThreePhotogrammetricCamera.PointsMaterial;
+            var OrientedImageMaterial = ThreePhotogrammetricCamera.OrientedImageMaterial;
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
@@ -94,7 +94,7 @@
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
 
-                textureMaterial = new PointsMaterial({
+                textureMaterial = new OrientedImageMaterial({
                     map: uvTexture,
                     size: 2,
                     vertexColors: THREE.VertexColors,
@@ -207,7 +207,7 @@
                         geometry.addGroup(0, 12, 0);
                         geometry.addGroup(12, 6, 1);
 
-                        viewMaterials[camera.name] = new PointsMaterial(viewMaterialOptions);
+                        viewMaterials[camera.name] = new OrientedImageMaterial(viewMaterialOptions);
                         viewMaterials[camera.name].map = textures[camera.name] || uvTexture;
                         var mesh = new THREE.Mesh( geometry, [wireMaterial, viewMaterials[camera.name]] );
                         mesh.scale.set(10, 10, 10);

@@ -78,7 +78,7 @@ function definePropertyUniform(object, property, defaultValue) {
     });
 }
 
-class PointsMaterial extends ShaderMaterial {
+class OrientedImageMaterial extends ShaderMaterial {
     constructor(options = {}) {
         const size = pop(options, 'size', 1);
         const diffuse = pop(options, 'color', new Color(0xeeeeee));
@@ -114,4 +114,4 @@ class PointsMaterial extends ShaderMaterial {
     }
 }
 
-export default PointsMaterial;
+export default OrientedImageMaterial;
