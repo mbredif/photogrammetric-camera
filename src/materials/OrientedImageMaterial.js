@@ -35,13 +35,13 @@ ShaderChunk.worldpos_vertex = `
 
 ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
 ${RadialDistortion.chunks.radial_pars_fragment}
+uniform bool diffuseColorGrey;
 #ifdef USE_MAP4
-	uniform mat4 uvwPreTransform;
-	uniform mat4 uvwPostTransform;
+  uniform mat4 uvwPreTransform;
+  uniform mat4 uvwPostTransform;
   uniform RadialDistortion uvDistortion;
   uniform sampler2D map;
   uniform float borderSharpness;
-  uniform bool diffuseColorGrey;
 #endif
 `
 
@@ -49,7 +49,6 @@ ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
   if (diffuseColorGrey) {
     diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.333333)));
   }
-
 #ifdef USE_MAP4
 	vec4 uvw = uvwPreTransform * vec4(vWorldPosition, 1);
   distort_radial(uvw, uvDistortion);

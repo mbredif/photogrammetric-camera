@@ -138,54 +138,6 @@
                 /* Ply loading */
                 plyGroup = new THREE.Group();
                 scene.add(plyGroup);
-                var plyParser = new THREE.PLYLoader();
-                function handlePly(name) {
-                    showHelp(false);
-                    return function(geometry) {
-                        console.log(name);
-                        var points = new THREE.Points( geometry, textureMaterial );
-                        plyGroup.add( points );
-                        geometry.computeBoundingBox();
-                        var center = new THREE.Vector3();
-                        geometry.boundingBox.getCenter(center);
-                        points.updateMatrixWorld(true);
-                    };
-                }
-                function loadPly(url) {
-                    plyParser.load( url, handlePly(url) );
-                }
-
-                /* Image loading */
-                function handleImage(name) {
-                    showHelp(false);
-                    return function(texture) {
-                        if (!texture) return;
-                        const match = name.match(/([^\/]*)\.[\w\d]/i);
-                        texture.name = match ? match[1] : name;
-                        textures[texture.name] = texture;
-                        const camera = cameras.getObjectByName(texture.name);
-                        setCamera(camera);
-                        return texture;
-                    };
-                }
-
-                function parseImage(source) {
-                    return function(dataURL) {
-                        return new Promise((resolve, reject) => {
-                            const finalize = (texture) => {
-                                source.close(dataURL, 'dataURL');
-                                resolve(texture);
-                            };
-                            textureLoader.load(dataURL, finalize, undefined, reject)
-                        });
-                    }
-                }
-
-                function loadImage(name, source) {
-                      return source.open(name, 'dataURL')
-                      .then(parseImage(source))
-                      .then(handleImage(name));
-                }
 
                 /* Orientation loading */
                 function cameraHelper(camera) {
@@ -225,6 +177,34 @@
                     return group;
                 };
 
+                // handle functions
+
+                function handlePly(name) {
+                    showHelp(false);
+                    return function(geometry) {
+                        console.log(name);
+                        var points = new THREE.Points( geometry, textureMaterial );
+                        plyGroup.add( points );
+                        geometry.computeBoundingBox();
+                        var center = new THREE.Vector3();
+                        geometry.boundingBox.getCenter(center);
+                        points.updateMatrixWorld(true);
+                    };
+                }
+
+                function handleImage(name) {
+                    showHelp(false);
+                    return function(texture) {
+                        if (!texture) return;
+                        const match = name.match(/([^\/]*)\.[\w\d]/i);
+                        texture.name = match ? match[1] : name;
+                        textures[texture.name] = texture;
+                        const camera = cameras.getObjectByName(texture.name);
+                        setCamera(camera);
+                        return texture;
+                    };
+                }
+
                 function handleOrientation(name) {
                     showHelp(false);
                     return function(camera) {
@@ -255,15 +235,41 @@
                     };
                 }
 
+                // parse functions
+                var plyLoader = new THREE.PLYLoader();
+                var parsePly = (source) => (data => plyLoader.parse(data));
+
+                function parseImage(source) {
+                    return (data) => {
+                        return new Promise((resolve, reject) => {
+                            textureLoader.load(data, resolve, undefined, reject)
+                        }).finally(() => source.close(data, 'dataURL'));
+                    }
+                }
+
                 function parseOrientation(source) {
                     var parsers = [MicmacOrientationParser, MatisOrientationParser];
-                    return function parseOrientationXML(xml) {
+                    return (data) => {
                         for(const parser of parsers) {
-                            var parsed = parser.parse(xml, source);
+                            var parsed = parser.parse(data, source);
                             if (parsed) return parsed;
                         }
                         return undefined;
                     }
+                }
+
+                // load functions
+
+                function loadPly(url, source) {
+                    return source.open(url, 'arrayBuffer')
+                    .then(parsePly(source))
+                    .then(handlePly(url));
+                }
+
+                function loadImage(url, source) {
+                    return source.open(url, 'dataURL')
+                    .then(parseImage(source))
+                    .then(handleImage(url));
                 }
 
                 function loadOrientation(name, source) {
@@ -273,7 +279,8 @@
                 }
 
                 function loadFileImSel(dir, source) {
-                    source.open(dir+'FileImSel.xml', 'text').then((xml) => {
+                    var url = dir+'FileImSel.xml';
+                    source.open(url, 'text').then((xml) => {
                         xml = new window.DOMParser().parseFromString(xml, 'text/xml');
                         var names = Array.from(xml.getElementsByTagName('Name'));
                         names.forEach(name => loadOrientation(dir+'Orientation-'+name.childNodes[0].nodeValue.trim()+'.xml', source));
@@ -293,15 +300,12 @@
                         if (json.target) {
                             orbitControls.target.copy(json.target);
                         }
-                        json.ply.forEach(url => todos.push(() => loadPly(source.path + url)));
+                        json.ply.forEach(url => todos.push(() => loadPly(url, source)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
                     });
                 }
 
-                function showHelp(show) {
-                    document.getElementById( 'help' ).style.display = show ? 'block' : 'none';
-                }
-
+                // file source
                 addFiles = function(files) {
                     showHelp(false);
                     var source = new FilesSource(files);
@@ -311,20 +315,9 @@
                         var name = file.name;
                         var ext = name.substr(name.lastIndexOf('.') + 1).toLowerCase();
                         switch (ext) {
-                            case 'ply':
-                                source.decode(file, 'arrayBuffer')
-                                .then(ply => plyParser.parse(ply))
-                                .then(handlePly(name));
-                                break;
-                            case 'xml':
-                                source.decode(file, 'text')
-                                .then(parseOrientation(source))
-                                .then(handleOrientation(name));
-                                break;
-                            case 'jpg':
-                                source.decode(file, 'dataURL')
-                                .then(parseImage(source))
-                                .then(handleImage(name));
+                            case 'ply': loadPly(name, source); break;
+                            case 'xml': loadOrientation(name, source); break;
+                            case 'jpg': loadImage(name, source); break;
                             default:
                         }
                     }
@@ -503,7 +496,12 @@
                 }
             }
 
-            /* GUI */
+            // GUI functions
+
+            function showHelp(show) {
+                document.getElementById( 'help' ).style.display = show ? 'block' : 'none';
+            }
+
             function initGUI() {
                 var gui = new dat.GUI();
                 cameraGUI = gui.addFolder('Camera');
