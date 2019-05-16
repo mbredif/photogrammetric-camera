@@ -6,12 +6,12 @@ module.exports = {
     },
     devtool: 'source-map',
     output: {
-        path: path.resolve(__dirname, "examples/dist"),
+        path: path.resolve(__dirname, "dist"),
         filename: '[name].js',
         library: 'ThreePhotogrammetricCamera',
         libraryTarget: 'umd'
     },
   devServer: {
-    publicPath: '/examples/dist/'
+    publicPath: '/dist/'
   },
 };

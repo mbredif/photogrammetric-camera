@@ -48,7 +48,7 @@
             </ul>
             Mathieu Brédif (<a href="http://recherche.ign.fr/labos/matis/~bredif">IGN ENSG, Lastig/Geovis, Univ. Paris Est</a>, <a href="http://github.com/mbredif/three-photogrammetric-camera">github</a>)
         </div>
-        <script src="dist/three-photogrammetric-camera.js"></script>
+        <script src="../dist/three-photogrammetric-camera.js"></script>
         <script>
             var THREE = ThreePhotogrammetricCamera.THREE;
             var PhotogrammetricCamera = ThreePhotogrammetricCamera.PhotogrammetricCamera;
@@ -77,6 +77,7 @@
             var plane, sphere;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
             viewCamera.up.set(0, 0, 1);
+            var textureCameraFar = 2000;
 
             var addFiles;
             function onFilesSubmit(form) {
@@ -95,18 +96,6 @@
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
 
-                textureMaterial = new OrientedImageMaterial({
-                    map: uvTexture,
-                    size: 2,
-                    vertexColors: THREE.VertexColors,
-                    sizeAttenuation: false,
-                    blending: THREE.NormalBlending,
-                });
-                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-500, 32, 32), textureMaterial);
-                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), textureMaterial);
-                viewCamera.add(sphere);
-                scene.add(plane);
-
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
                 viewMaterialOptions = {
@@ -115,6 +104,22 @@
                     transparent: true,
                     blending: THREE.NormalBlending,
                 };
+
+                textureMaterial = new OrientedImageMaterial({
+                    map: uvTexture,
+                    size: 2,
+                    sizeAttenuation: false,
+                    vertexColors: THREE.VertexColors,
+                    blending: THREE.NormalBlending,
+                    color: 0xff0000,
+                    //opacity: 0.5,
+                });
+                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
+                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), textureMaterial);
+                const radius = 5000;
+                sphere.scale.set(radius, radius, radius);
+                viewCamera.add(sphere);
+                scene.add(plane);
 
                 // renderer
 
@@ -218,6 +223,8 @@
                         var check = '[?]';
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                         console.log(check, name);
+                        camera.far = textureCameraFar;
+                        camera.updateProjectionMatrix();
                         if (useCustomCameraHelper) {
                             // use our Camera Helper
                             camera.add(cameraHelper(camera));
@@ -226,7 +233,6 @@
                             camera.near = 0.5;
                             camera.far = 1;
                             scene.add(new THREE.CameraHelper(camera));
-                            camera.far = 10000;
                         }
                         cameras.add(camera);
                         cameras.children.sort((a, b) => a.name.localeCompare(b.name));
@@ -292,14 +298,22 @@
                     var source = new FetchSource(path);
                     source.open(file, 'text').then((json) => {
                         json = JSON.parse(json);
-                        if (json.plane) {
+                        if (json.plane && json.plane.position) {
                             const position = json.plane.position;
-                            if (position && position.z !== undefined) plane.position.z = position.z;
-                            orbitControls.target.set(0, 0, plane.position.z);
+                            if (position.x !== undefined) plane.position.x = position.x;
+                            if (position.y !== undefined) plane.position.y = position.y;
+                            if (position.z !== undefined) plane.position.z = position.z;
+                            orbitControls.target.copy(plane.position);
                         }
                         if (json.target) {
                             orbitControls.target.copy(json.target);
                         }
+                        if (json.sphere) {
+                            const radius = json.sphere.radius;
+                            if (radius !== undefined) {
+                sphere.scale.set(radius, radius, radius);
+                }
+            }
                         json.ply.forEach(url => todos.push(() => loadPly(url, source)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
                     });
@@ -340,7 +354,10 @@
 
                 function setMaterial(material, camera) {
                     material.map = textures[camera.name] || uvTexture;
-                    material.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(camera.matrixWorldInverse);
+            camera.getWorldPosition(material.uvwPosition);
+                const m = new THREE.Matrix4().copy(camera.matrixWorldInverse);
+                    m.setPosition({x:0,y:0,z:0});
+                    material.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(m);
                     material.uvwPostTransform.copy(camera.postProjectionMatrix);
                     if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
                         material.uvDistortion = camera.distos[0];
@@ -517,7 +534,7 @@
                 cameraGUI.visible = cameraGUI.add(cameras, 'visible');
                 cameraGUI.opacity = cameraGUI.add(viewMaterialOptions, 'opacity', 0, 1);
                 cameraGUI.near = cameraGUI.add(viewCamera, 'near', 0, 10).listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 100).listen().onChange(updateViewCameraFromGUI);
+                cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 3000).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.zoom = cameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.view = cameraGUI.add(viewCamera.view, 'enabled').name('crop').listen().onChange(updateViewCameraFromGUI);
                 cameraGUI.offsetX = cameraGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).name('crop x0').listen().onChange(updateViewCameraFromGUI);
@@ -533,7 +550,7 @@
                 backgroundGUI.add(textureMaterial, 'wireframe');
                 backgroundGUI.add(sphere, 'visible').name('sphere visible');
                 backgroundGUI.add(plane, 'visible').name('plane visible');
-                backgroundGUI.add(plane.position, 'z', -100, 100, 0.01).name('plane Z').listen();
+                backgroundGUI.add(plane.position, 'z', -10, 100, 0.01).name('plane Z').listen();
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
                 gui.add(textureMaterial, 'diffuseColorGrey');
@@ -567,14 +584,13 @@
                       orbitControls.saveState();
                       orbitControls.enabled = true;
                     }
+                    viewCamera.near = 1;
                     viewCamera.far = 10000;
                     viewCamera.updateProjectionMatrix();
                     gui.updateFromCamera(viewCamera);
                 }
                 if (viewMaterials[nextCamera.name])
                     viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
-                plane.position.x = viewCamera.position.x;
-                plane.position.y = viewCamera.position.y;
 
                 render();
             }
