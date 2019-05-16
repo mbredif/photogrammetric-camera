@@ -17,11 +17,12 @@ function popUniform(options, property, defaultValue) {
 
 ShaderChunk.common = `${ShaderChunk.common}
 #ifdef USE_WORLDPOS
-varying vec3 vEyePosition;
+  varying vec4 vEyePosition;
 #endif
 #ifdef USE_MAP4
-#undef USE_MAP
+  #undef USE_MAP
   uniform vec3 uvwPosition;
+  uniform mat4 uvwPreTransform;
 #endif
 `;
 
@@ -32,7 +33,7 @@ ShaderChunk.worldpos_vertex = `
 #ifdef USE_WORLDPOS
   mat4 m = modelMatrix;
   m[3].xyz -= uvwPosition;
-  vEyePosition = (m * vec4( transformed, 1.0 )).xyz;
+  vEyePosition = uvwPreTransform * m * vec4( transformed, 1.0 );
 #endif
 `;
 
@@ -40,9 +41,8 @@ ShaderChunk.color_pars_fragment = `${ShaderChunk.color_pars_fragment}
 ${RadialDistortion.chunks.radial_pars_fragment}
 uniform bool diffuseColorGrey;
 #ifdef USE_MAP4
-  uniform mat4 uvwPreTransform;
-  uniform mat4 uvwPostTransform;
   uniform RadialDistortion uvDistortion;
+  uniform mat4 uvwPostTransform;
   uniform sampler2D map;
   uniform float borderSharpness;
 #endif
@@ -53,7 +53,7 @@ ShaderChunk.color_fragment = `${ShaderChunk.color_fragment}
     diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.333333)));
   }
 #ifdef USE_MAP4
-    vec4 uvw = uvwPreTransform * vec4(vEyePosition, 1.);
+  vec4 uvw = vEyePosition;
   distort_radial(uvw, uvDistortion);
   uvw = uvwPostTransform * uvw;
   uvw.xyz /= 2. * uvw.w;
