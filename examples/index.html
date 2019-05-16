@@ -304,6 +304,8 @@
                             if (position.y !== undefined) plane.position.y = position.y;
                             if (position.z !== undefined) plane.position.z = position.z;
                             orbitControls.target.copy(plane.position);
+                            const scale = json.plane.scale || 1000;
+                            plane.scale.set(scale,scale,scale);
                         }
                         if (json.target) {
                             orbitControls.target.copy(json.target);
@@ -311,9 +313,9 @@
                         if (json.sphere) {
                             const radius = json.sphere.radius;
                             if (radius !== undefined) {
-                sphere.scale.set(radius, radius, radius);
-                }
-            }
+                                sphere.scale.set(radius, radius, radius);
+                            }
+                        }
                         json.ply.forEach(url => todos.push(() => loadPly(url, source)));
                         json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
                     });
