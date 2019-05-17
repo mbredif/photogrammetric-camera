@@ -77,7 +77,8 @@
             var plane, sphere;
             viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
             viewCamera.up.set(0, 0, 1);
-            var textureCameraFar = 2000;
+            var sphereRadius = 5000;
+            var epsilonRadius = 100;
 
             var addFiles;
             function onFilesSubmit(form) {
@@ -112,12 +113,11 @@
                     vertexColors: THREE.VertexColors,
                     blending: THREE.NormalBlending,
                     color: 0xff0000,
-                    //opacity: 0.5,
+                    transparent: true,
                 });
                 sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
-                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000), textureMaterial);
-                const radius = 5000;
-                sphere.scale.set(radius, radius, radius);
+                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), textureMaterial);
+                sphere.scale.set(sphereRadius, sphereRadius, sphereRadius);
                 viewCamera.add(sphere);
                 scene.add(plane);
 
@@ -223,7 +223,7 @@
                         var check = '[?]';
                         if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                         console.log(check, name);
-                        camera.far = textureCameraFar;
+                        camera.far = sphereRadius+epsilonRadius;
                         camera.updateProjectionMatrix();
                         if (useCustomCameraHelper) {
                             // use our Camera Helper
@@ -311,9 +311,9 @@
                             orbitControls.target.copy(json.target);
                         }
                         if (json.sphere) {
-                            const radius = json.sphere.radius;
-                            if (radius !== undefined) {
-                                sphere.scale.set(radius, radius, radius);
+                            sphereRadius = json.sphere.radius;
+                            if (sphereRadius !== undefined) {
+                                sphere.scale.set(sphereRadius, sphereRadius, sphereRadius);
                             }
                         }
                         json.ply.forEach(url => todos.push(() => loadPly(url, source)));
@@ -356,17 +356,7 @@
 
                 function setMaterial(material, camera) {
                     material.map = textures[camera.name] || uvTexture;
-            camera.getWorldPosition(material.uvwPosition);
-                const m = new THREE.Matrix4().copy(camera.matrixWorldInverse);
-                    m.setPosition({x:0,y:0,z:0});
-                    material.uvwPreTransform.copy(camera.preProjectionMatrix).multiply(m);
-                    material.uvwPostTransform.copy(camera.postProjectionMatrix);
-                    if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
-                        material.uvDistortion = camera.distos[0];
-                    } else {
-                        material.uvDistortion = { C: new THREE.Vector2(), R: new THREE.Vector4() };
-                        material.uvDistortion.R.w = Infinity;
-                    }
+                    material.setCamera(camera);
                 }
 
                 /* Keyboard events */
@@ -495,23 +485,6 @@
                     Viabon: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
                     },
-                    /*
-                     TODO
-                    Chambord: function() {
-                        var source = new FetchSource('Chambord/');
-                        loadFileImSel('Ori-MEP_FNE/', source);
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO1/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO2/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FNO3/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSE/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_FSO/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDN/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TDO/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TE/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TN/');
-                        loadFileImSel(base + 'Chambord/', 'Ori-MEP_TS/'); // no FileImSel.xml
-                    }
-                    */
                 }
             }
 
@@ -556,6 +529,7 @@
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
                 gui.add(textureMaterial, 'diffuseColorGrey');
+                gui.add(textureMaterial, 'debugOpacity', 0, 1);
 
                 return gui;
             }
