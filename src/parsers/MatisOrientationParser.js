@@ -35,12 +35,10 @@ function parseConic(xml, size) {
     var focal = getNumbers(xml, 'focale');
     var point = getNumbers(xml, 'ppa', ['c', 'l']);
     var skew = 0;
-    var disto = {
-        C: getNumbers(xml, 'pps', ['c', 'l']), // distortion center
-        R: getNumbers(xml, 'distortion', ['r3', 'r5', 'r7']), // radial distortion coefficients
-        project: RadialDistortion.project,
-    };
-    disto.r2max = PhotogrammetricDistortion.r2max(disto.R);
+    var disto = new RadialDistortion(
+        getNumbers(xml, 'pps', ['c', 'l']), // distortion center
+        getNumbers(xml, 'distortion', ['r3', 'r5', 'r7']) // radial distortion coefficients
+    );
     var near = focal[0] * 0.035 / size[0]; // horizontal focal length in meters, assuming a 35mm-wide sensor
     var far = 1000; // 1km
     return new PhotogrammetricCamera(focal, size, point, skew, [disto], near, far);

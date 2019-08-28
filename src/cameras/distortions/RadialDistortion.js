@@ -1,3 +1,4 @@
+import { Vector2, Vector4 } from 'three';
 import { default as PhotogrammetricDistortion } from '../PhotogrammetricDistortion';
 
 // http://fr.wikipedia.org/wiki/Methode_de_Cardan
@@ -63,9 +64,28 @@ function r2max(R)
     return roots[imax];
 }
 
+class RadialDistortion {
+/**
+ * @Constructor
+ * @param {Number[2]|Vector2} C - distortion center
+ * @param {Number[]} R - polynomial distortion coefficients : [r3, r5=0, r7=0]
+ * @param {Number?} R2max - the validity domain of the distortion as the squared distance in pixels to its center
+ **/
+  constructor(C, R, R2max) {
+    if(R.length > 3) {
+        console.warn('RadialDistortion is currently limited to degrees 3,5,7: Neglecting higher order coefficients.');
+    }
+    R[1] = R[1] || 0;
+    R[2] = R[2] || 0;
+    R[3] = R2max || r2max(R);
+    this.C = Array.isArray(C) ? new Vector2().fromArray(C) : C;
+    this.R = new Vector4().fromArray(R);
+  }
+
+
 // https://github.com/micmacIGN/micmac/blob/e0008b7a084f850aa9db4dc50374bd7ec6984da6/src/photogram/phgr_ebner_brown_dist.cpp#L441-L475
 // WithFraser=false
-function project(p) {
+ project(p) {
     var x = p.x - this.C[0];
     var y = p.y - this.C[1];
     var r2 = x * x + y * y;
@@ -73,34 +93,26 @@ function project(p) {
     p.x += radial * x;
     p.y += radial * y;
     return p;
+  }
 }
 
-const chunks = {
+RadialDistortion.chunks = {
     radial_pars_fragment: `
 struct RadialDistortion {
   vec2 C;
   vec4 R;
 };
 
-float polynom(vec3 R, float r2) {
-  float r4 = r2*r2;
-  return dot(R, vec3(r2, r4, r2*r4));
-}
-
 bool distort_radial(inout vec4 p, RadialDistortion disto) {
   p /= p.w;
   vec2 r = p.xy - disto.C;
   float r2 = dot(r, r);
   if (r2 > disto.R.w) return false; // to be culled
-  p.xy += polynom(disto.R.xyz, r2) * r;
+  float r4 = r2*r2;
+  p.xy += dot(disto.R.xyz, vec3(r2, r4, r2*r4)) * r;
   return true;
 }
 `,
-}
-
-
-export default {
-    r2max,
-    project,
-    chunks,
 };
+
+export default RadialDistortion;

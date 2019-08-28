@@ -1,7 +1,27 @@
 import { default as PhotogrammetricDistortion } from '../PhotogrammetricDistortion';
 
-// https://github.com/micmacIGN/micmac/blob/e0008b7a084f850aa9db4dc50374bd7ec6984da6/src/photogram/phgr_ebner_brown_dist.cpp#L2169-L2352
-function project(p) {
+class FishEyeDistortion {
+
+  /**
+   * @Constructor
+   * @param {Number[]} P - ?
+   * @param {Number[2]} C - distortion center in pixels
+   * @param {Number} F - focal length in pixels
+   * @param {Number[]} l - coefficients
+   * @param {Number[]} R - radial coefficients
+   * @param {Bool} equisolid - equisolid fisheye or not
+   **/
+  constructor(P, C, F, l, R, equisolid) {
+    this.P = P;
+    this.C = C;
+    this.F = F;
+    this.l = l;
+    this.R = R;
+    this.equisolid = equisolid;
+  }
+
+  project(p) {
+    // https://github.com/micmacIGN/micmac/blob/e0008b7a084f850aa9db4dc50374bd7ec6984da6/src/photogram/phgr_ebner_brown_dist.cpp#L2169-L2352
     // Apply N normalization
     var A = (p.x - this.C[0]) / this.F;
     var B = (p.y - this.C[1]) / this.F;
@@ -52,8 +72,7 @@ function project(p) {
     p.x = this.C[0] + this.F * p.x;
     p.y = this.C[1] + this.F * p.y;
     return p;
+  }
 }
 
-export default {
-    project,
-};
+export default FishEyeDistortion;

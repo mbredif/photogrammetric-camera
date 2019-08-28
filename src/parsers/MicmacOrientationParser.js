@@ -30,81 +30,55 @@ function parseChildNumbers(xml, tagName) {
 
 function parseDistortion(xml) {
     xml = xml.children[0];
-    var disto = { type: xml.tagName };
+    var type = xml.tagName;
     var params;
     var states;
-    if (disto.type === 'ModUnif') {
-        disto.type = parseText(xml, 'TypeModele');
+    if (type === 'ModUnif') {
+        type = parseText(xml, 'TypeModele');
         params = parseChildNumbers(xml, 'Params');
         states = parseChildNumbers(xml, 'Etats');
     }
 
-    switch (disto.type) {
-        case 'ModNoDist':
-            return undefined;
-        case 'ModRad':
+    switch (type) {
+        case 'ModNoDist'     : return undefined;
+        case 'eModeleEbner'  : return new Ebner(states[0], params);
+        case 'eModeleDCBrown': return new BrownDistortion(states[0], params);
+        case 'ModRad': {
             const R = parseChildNumbers(xml, 'CoeffDist', []); // radial distortion coefficients
             if(R.length == 0) return undefined;
-            if(R.length > 3) {
-                console.warn('ModRad is currently limited to degrees 3,5,7: Neglecting higher order coefficients.');
-            }
-            R[1] = R[1] || 0;
-            R[2] = R[2] || 0;
-            R[3] = RadialDistortion.r2max(R);
-            disto.R = new Vector4().fromArray(R);
-            disto.C = parseVector2(xml, 'CDist'); // distortion center in pixels
-            disto.project = RadialDistortion.project;
-            return disto;
+            const C = parseVector2(xml, 'CDist'); // distortion center in pixels
+            return new RadialDistortion(C, R);
+        }
         case 'eModelePolyDeg2':
         case 'eModelePolyDeg3':
         case 'eModelePolyDeg4':
         case 'eModelePolyDeg5':
         case 'eModelePolyDeg6':
         case 'eModelePolyDeg7':
-            disto.S = states[0];
-            disto.C = states.slice(1, 3);
-            disto.degree = Number(disto.type.substr('eModelePolyDeg'.length));
-
-            // degree could be decreased if params has a long enough tail of zeroes
-            var firstZero = params.length - params.reverse().findIndex(x => x !== 0);
-            params.reverse();
-            for (var d = disto.degree - 1; d > 0; --d) {
-                var l = d * (d + 3) - 4; // = length of R at degree d, as l(2)=6 and l(n)=l(n-1)+2n+2
-                if (firstZero <= l) {
-                    params = params.slice(0, l);
-                    disto.degree = d;
-                }
-            }
-            disto.R = params;
-            disto.project = PolynomDistortion.project;
-            return disto;
-        case 'ModPhgrStd':
-            disto.C = parseNumbers(xml, 'CDist'); // distortion center in pixels
-            disto.R = parseChildNumbers(xml, 'CoeffDist'); // radial distortion coefficients
-            disto.P = parseNumbers(xml, 'P1', [0]).concat(parseNumbers(xml, 'P2', [0]));
-            disto.b = parseNumbers(xml, 'b1', [0]).concat(parseNumbers(xml, 'b2', [0]));
-            disto.project = FraserDistortion.project;
-            return disto;
-        case 'eModeleEbner':
-            disto.B2 = states[0] * states[0] / 1.5;
-            disto.P = params;
-            disto.project = EbnerDistortion.project;
-            return disto;
-        case 'eModeleDCBrown':
-            disto.F = states[0];
-            disto.P = params;
-            disto.project = BrownDistortion.project;
-            return disto;
+        {
+            const S = states[0];
+            const C = states.slice(1, 3);
+            const degree = Number(type.substr('eModelePolyDeg'.length));
+            const R = params;
+            return new PolynomDistortion(C, S, R, degree);
+        }
+        case 'ModPhgrStd': {
+            const C = parseNumbers(xml, 'CDist'); // distortion center in pixels
+            const R = parseChildNumbers(xml, 'CoeffDist'); // radial distortion coefficients
+            const P = parseNumbers(xml, 'P1', [0]).concat(parseNumbers(xml, 'P2', [0]));
+            const b = parseNumbers(xml, 'b1', [0]).concat(parseNumbers(xml, 'b2', [0]));
+            return new FraserDistortion(C, P, R, b);
+        }
         case 'eModele_FishEye_10_5_5':
-        case 'eModele_EquiSolid_FishEye_10_5_5':
-            disto.F = states[0];
-            disto.C = params.slice(0, 2);
-            disto.R = params.slice(2, 12);
-            disto.P = params.slice(12, 22);
-            disto.l = params.slice(22);
-            disto.equisolid = disto.type === 'eModele_EquiSolid_FishEye_10_5_5';
-            disto.project = FishEyeDistortion.project;
-            return disto;
+        case 'eModele_EquiSolid_FishEye_10_5_5': {
+            const equisolid = type === 'eModele_EquiSolid_FishEye_10_5_5';
+            const F = states[0];
+            const C = params.slice(0, 2);
+            const R = params.slice(2, 12);
+            const P = params.slice(12, 22);
+            const l = params.slice(22);
+            return new FishEyeDistortion(P, C, F, l, R, equisolid);
+        }
         default:
             throw new Error(`Error parsing micmac orientation : unknown distortion ${xml.tagName}`);
     }
