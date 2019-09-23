@@ -287,7 +287,7 @@
                     if (!name)
                     {
                         const match = url.match(/([^\/]*)\.[\w\d]/i);
-                      name = match ? match[1] : url;
+                        name = match ? match[1] : url;
                     }
                     return source.open(url, 'dataURL')
                     .then(parseImage(source))
@@ -297,8 +297,8 @@
                 function loadOrientation(url, source, name) {
                     if (!name)
                     {
-                        const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
-                      name = match ? match[1] : url;
+                        const match = url.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
+                        name = match ? match[1] : url;
                     }
                     return source.open(url, 'text')
                         .then(parseOrientation(source))
