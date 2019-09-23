@@ -69,7 +69,7 @@
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
             var nextCamera = new PhotogrammetricCamera();
-            var textureCamera = viewCamera;
+            var textureCamera = new PhotogrammetricCamera();
             var duration = 0.3;
             var useCustomCameraHelper = true;
             var scenes;
@@ -84,6 +84,19 @@
             function onFilesSubmit(form) {
                 addFiles(form.files.files);
                 return false;
+            }
+
+            function download(filename, text) {
+              var element = document.createElement('a');
+              element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+              element.setAttribute('download', filename);
+
+              element.style.display = 'none';
+              document.body.appendChild(element);
+
+              element.click();
+
+              document.body.removeChild(element);
             }
 
             function init() {
@@ -201,8 +214,7 @@
                     showHelp(false);
                     return function(texture) {
                         if (!texture) return;
-                        const match = name.match(/([^\/]*)\.[\w\d]/i);
-                        texture.name = match ? match[1] : name;
+                        texture.name = name;
                         textures[texture.name] = texture;
                         const camera = cameras.getObjectByName(texture.name);
                         setCamera(camera);
@@ -214,8 +226,7 @@
                     showHelp(false);
                     return function(camera) {
                         if (!camera) return;
-                        const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
-                        camera.name = match ? match[1] : name;
+                        camera.name = name;
                         if (cameras.children.find(cam => cam.name == camera.name)) {
                             console.warn(`Camera "${camera.name}" was already loaded, skipping`);
                             return;
@@ -272,14 +283,24 @@
                     .then(handlePly(url));
                 }
 
-                function loadImage(url, source) {
+                function loadImage(url, source, name) {
+                    if (!name)
+                    {
+                        const match = url.match(/([^\/]*)\.[\w\d]/i);
+                      name = match ? match[1] : url;
+                    }
                     return source.open(url, 'dataURL')
                     .then(parseImage(source))
-                    .then(handleImage(url));
+                    .then(handleImage(name));
                 }
 
-                function loadOrientation(name, source) {
-                    return source.open(name, 'text')
+                function loadOrientation(url, source, name) {
+                    if (!name)
+                    {
+                        const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
+                      name = match ? match[1] : url;
+                    }
+                    return source.open(url, 'text')
                         .then(parseOrientation(source))
                         .then(handleOrientation(name));
                 }
@@ -317,7 +338,7 @@
                             }
                         }
                         json.ply.forEach(url => todos.push(() => loadPly(url, source)));
-                        json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source)));
+                        json.ori.forEach((orientationUrl, i) => todos.push(() => loadOrientedImage(orientationUrl, json.img[i], source, json.img[i])));
                     });
                 }
 
@@ -375,7 +396,7 @@
                 function setTexture(camera) {
                     if (!camera) return;
                     console.log('Texture:', camera.name);
-                    textureCamera = camera;
+                    textureCamera.copy(camera);
                     setMaterial(textureMaterial, camera);
                 }
 
@@ -390,8 +411,8 @@
                     return array[(index + delta + array.length) %  array.length];
                 }
 
-                function loadOrientedImage(orientationUrl, imageUrl, source) {
-                    loadImage(imageUrl, source).then(() => loadOrientation(orientationUrl, source));
+                function loadOrientedImage(orientationUrl, imageUrl, source, name) {
+                    loadImage(imageUrl, source, name).then(() => loadOrientation(orientationUrl, source, name));
                 }
 
                 function keyDown(event) {
@@ -429,6 +450,45 @@
 
                 /* preset scenes */
                 scenes = {
+                    Save: function() {
+                      var geojson = { type: "FeatureCollection", features: [] };
+                      cameras.children.forEach((camera) => {
+                        var coordinates = camera.position.toArray();
+                        var properties = {
+                            name : camera.name,
+                            qx : camera.quaternion.x,
+                            qy : camera.quaternion.y,
+                            qz : camera.quaternion.z,
+                            qw : camera.quaternion.w,
+                            fx : camera.focal.x,
+                            fy : camera.focal.y,
+                            px : camera.point.x,
+                            py : camera.point.y,
+                            sk : camera.skew,
+                            sx : camera.view.fullWidth,
+                            sy : camera.view.fullHeight,
+                            m00 : camera.imageMatrix.elements[0],
+                            m01 : camera.imageMatrix.elements[1],
+                            m10 : camera.imageMatrix.elements[4],
+                            m11 : camera.imageMatrix.elements[5],
+                            m20 : camera.imageMatrix.elements[12],
+                            m21 : camera.imageMatrix.elements[13]
+                        };
+                        // assumes camera.imageMatrix[]=identity for other elements
+                        if (camera.distos.length == 1) {
+                            properties.c3 = camera.distos[0].R.x;
+                            properties.c5 = camera.distos[0].R.y;
+                            properties.c7 = camera.distos[0].R.z;
+                            properties.cm = camera.distos[0].R.w;
+                            properties.cx = camera.distos[0].C.x;
+                            properties.cy = camera.distos[0].C.y;
+                        }
+                        var feature = { type: "Feature", "geometry": { type: "Point", coordinates }, properties };
+                        geojson.features.push(feature);
+                      });
+                      console.log(geojson);
+                      download("ori.json", JSON.stringify(geojson));
+                    } ,
                     Clear: function() {
                         todos.length = 0;
                         const camera = new PhotogrammetricCamera();
@@ -437,8 +497,8 @@
                         nextCamera.set(camera);
                         nextCamera.timestamp = undefined;
                         viewCamera.zoom = 0.8; // zoom out a bit to see the image borders
-                        textureCamera = viewCamera;
-                        gui.updateFromCamera(viewCamera);
+                        textureCamera.copy(viewCamera);
+                        gui.updateFromCameras(viewCamera, textureCamera);
                         textureMaterial.map = null;
                         Object.keys(textures).forEach(key => textures[key].dispose());
                         while(cameras.children.length) cameras.remove(cameras.children[0]);
@@ -484,7 +544,7 @@
                     },
                     Viabon: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
-                    },
+                    }
                 }
             }
 
@@ -496,26 +556,51 @@
 
             function initGUI() {
                 var gui = new dat.GUI();
-                cameraGUI = gui.addFolder('Camera');
+                viewCameraGUI = gui.addFolder('View Camera');
+                textureCameraGUI = gui.addFolder('Texture Camera');
                 function updateViewCameraFromGUI() {
                     viewCamera.updateProjectionMatrix();
                 };
-                gui.updateFromCamera = function updateFromCamera(camera) {
-                    cameraGUI.offsetX.max(camera.view.fullWidth);
-                    cameraGUI.offsetY.max(camera.view.fullHeight);
-                    cameraGUI.width.max(camera.view.fullWidth);
-                    cameraGUI.height.max(camera.view.fullHeight);
+                var textureView = textureCamera.view;
+                function updateTextureCameraFromGUI() {
+                    Object.assign(textureCamera.view, textureView);
+                    textureCamera.updateProjectionMatrix();
+                    textureMaterial.setCamera(textureCamera);
+                    var name = textureCamera.name;
+                    if (name.length > 30)
+                      name = name.substr(0,13)+'[..]'+name.substr(-13,13)
+                    textureCameraGUI.name = 'Tex: ' + name;
                 };
-                cameraGUI.visible = cameraGUI.add(cameras, 'visible');
-                cameraGUI.opacity = cameraGUI.add(viewMaterialOptions, 'opacity', 0, 1);
-                cameraGUI.near = cameraGUI.add(viewCamera, 'near', 0, 10).listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.far = cameraGUI.add(viewCamera, 'far', 1, 3000).listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.zoom = cameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.view = cameraGUI.add(viewCamera.view, 'enabled').name('crop').listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.offsetX = cameraGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).name('crop x0').listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.offsetY = cameraGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).name('crop y0').listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.width = cameraGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).name('crop width').listen().onChange(updateViewCameraFromGUI);
-                cameraGUI.height = cameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
+                gui.updateFromCameras = function updateFromCameras(viewCamera, textureCamera) {
+                    viewCameraGUI.offsetX.max(viewCamera.view.fullWidth);
+                    viewCameraGUI.offsetY.max(viewCamera.view.fullHeight);
+                    viewCameraGUI.width.max(viewCamera.view.fullWidth);
+                    viewCameraGUI.height.max(viewCamera.view.fullHeight);
+                    Object.assign(textureView, textureCamera.view);
+                    textureCameraGUI.offsetX.max(textureView.fullWidth);
+                    textureCameraGUI.offsetY.max(textureView.fullHeight);
+                    textureCameraGUI.width.max(textureView.fullWidth);
+                    textureCameraGUI.height.max(textureView.fullHeight);
+                };
+                viewCameraGUI.visible = viewCameraGUI.add(cameras, 'visible');
+                viewCameraGUI.opacity = viewCameraGUI.add(viewMaterialOptions, 'opacity', 0, 1);
+                viewCameraGUI.near = viewCameraGUI.add(viewCamera, 'near', 0, 10).listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.far = viewCameraGUI.add(viewCamera, 'far', 1, 3000).listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.zoom = viewCameraGUI.add(viewCamera, 'zoom', 0, 2).listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.view = viewCameraGUI.add(viewCamera.view, 'enabled').name('crop').listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.offsetX = viewCameraGUI.add(viewCamera.view, 'offsetX', 0, viewCamera.view.fullWidth).name('crop x0').listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.offsetY = viewCameraGUI.add(viewCamera.view, 'offsetY', 0, viewCamera.view.fullHeight).name('crop y0').listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.width = viewCameraGUI.add(viewCamera.view, 'width', 1, viewCamera.view.fullWidth).name('crop width').listen().onChange(updateViewCameraFromGUI);
+                viewCameraGUI.height = viewCameraGUI.add(viewCamera.view, 'height', 1, viewCamera.view.fullHeight).name('crop height').listen().onChange(updateViewCameraFromGUI);
+
+                textureCameraGUI.near = textureCameraGUI.add(textureCamera, 'near', 0, 10).listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.far = textureCameraGUI.add(textureCamera, 'far', 1, 3000).listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.zoom = textureCameraGUI.add(textureCamera, 'zoom', 0, 2).listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.view = textureCameraGUI.add(textureView, 'enabled').name('crop').listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.offsetX = textureCameraGUI.add(textureView, 'offsetX', 0, textureView.fullWidth).name('crop x0').listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.offsetY = textureCameraGUI.add(textureView, 'offsetY', 0, textureView.fullHeight).name('crop y0').listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.width = textureCameraGUI.add(textureView, 'width', 1, textureView.fullWidth).name('crop width').listen().onChange(updateTextureCameraFromGUI);
+                textureCameraGUI.height = textureCameraGUI.add(textureView, 'height', 1, textureView.fullHeight).name('crop height').listen().onChange(updateTextureCameraFromGUI);
 
                 var scenesGUI = gui.addFolder('Scenes');
                 for(const key in scenes) scenesGUI.add(scenes, key);
@@ -525,7 +610,7 @@
                 backgroundGUI.add(textureMaterial, 'wireframe');
                 backgroundGUI.add(sphere, 'visible').name('sphere visible');
                 backgroundGUI.add(plane, 'visible').name('plane visible');
-                backgroundGUI.add(plane.position, 'z', -10, 100, 0.01).name('plane Z').listen();
+                backgroundGUI.add(plane.position, 'z', -100, 1000, 0.1).name('plane Z').listen();
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
                 gui.add(textureMaterial, 'diffuseColorGrey');
@@ -563,7 +648,7 @@
                     viewCamera.near = 1;
                     viewCamera.far = 10000;
                     viewCamera.updateProjectionMatrix();
-                    gui.updateFromCamera(viewCamera);
+                    gui.updateFromCameras(viewCamera, textureCamera);
                 }
                 if (viewMaterials[nextCamera.name])
                     viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
