@@ -6,6 +6,16 @@ var ndcMatrix = new Matrix4().set(
     0, 0, 1, 0,
     0, 0, 0, 1);
 
+Matrix4.prototype.lerp = function(m, t) {
+	var te = this.elements;
+	var me = m.elements;
+	te[0]+=t*(me[0]-te[0]);   te[1]+=t*(me[1]-te[1]);   te[2]+=t*(me[2]-te[2]);   te[3]+=t*(me[3]-te[3]);
+	te[4]+=t*(me[4]-te[4]);   te[5]+=t*(me[5]-te[5]);   te[6]+=t*(me[6]-te[6]);   te[7]+=t*(me[7]-te[7]);
+	te[8]+=t*(me[8]-te[8]);   te[9]+=t*(me[9]-te[9]);   te[10]+=t*(me[10]-te[10]);te[11]+=t*(me[11]-te[11]);
+	te[12]+=t*(me[12]-te[12]);te[13]+=t*(me[13]-te[13]);te[14]+=t*(me[14]-te[14]);te[15]+=t*(me[15]-te[15]);
+	return this;
+};
+
 class PhotogrammetricCamera extends PerspectiveCamera {
     /**
      * @Constructor
@@ -18,8 +28,9 @@ class PhotogrammetricCamera extends PerspectiveCamera {
      * @param {number} far - Camera frustum far plane (default: see THREE.PerspectiveCamera).
      * @param {number} aspect - aspect ratio of the camera (default: size.x/size.y).
      * @param {Matrix4} imageMatrix - an optional perspective post-distortion transform in image space (default: undefined).
+     * @param {Texture} mask - an optional texture mask (default: undefined).
      */
-    constructor(focal, size, point, skew, distos, near, far, aspect, imageMatrix) {
+    constructor(focal, size, point, skew, distos, near, far, aspect, imageMatrix, mask) {
         focal = Array.isArray(focal) ? new Vector2().fromArray(focal) : (focal || 1024);
         point = Array.isArray(point) ? new Vector2().fromArray(point) : point;
         size = Array.isArray(size) ? new Vector2().fromArray(size) : (size || 1024);
@@ -59,11 +70,12 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         // filmOffset is not supported
         // filmGauge is only used in compatibility PerspectiveCamera functions
         this.filmOffset = 0;
+        this.mask = mask;
 
         this.preProjectionMatrix = new Matrix4();
         this.postProjectionMatrix = new Matrix4();
         this.textureMatrix = new Matrix4();
-        this.imageMatrix = imageMatrix;
+        this.imageMatrix = imageMatrix ? new Matrix4().copy(imageMatrix) : new Matrix4().identity();
         this.updateProjectionMatrix();
     }
 
@@ -86,9 +98,8 @@ class PhotogrammetricCamera extends PerspectiveCamera {
             1 / this.view.fullWidth,
             1 / this.view.fullHeight,
             1);
-        if (this.imageMatrix) {
-            this.textureMatrix.multiply(this.imageMatrix);
-        }
+        this.textureMatrix.multiply(this.imageMatrix);
+
         var textureAspect = this.view.fullWidth / this.view.fullHeight;
         if (this.view.enabled) {
             textureAspect = this.view.width / this.view.height;
@@ -177,6 +188,7 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         this.position.lerp(camera.position, t);
         this.quaternion.slerp(camera.quaternion, t);
         // TODO: this.distos = ???
+        this.imageMatrix.lerp(camera.imageMatrix, t);
         this.skew += t * (camera.skew - this.skew);
         this.zoom += t * (camera.zoom - this.zoom);
         this.aspect += t *(camera.aspect - this.aspect);
@@ -202,7 +214,7 @@ class PhotogrammetricCamera extends PerspectiveCamera {
         this.zoom = source.zoom;
         this.aspect = source.aspect;
         this.near = source.near;
-        this.far = source.far;
+        this.imageMatrix.copy(source.imageMatrix);
         Object.assign(this.view, source.view);
         return this.updateProjectionMatrix();
     }

@@ -4,7 +4,7 @@ const URL = window.URL || window.webkitURL;
 function decode(response, type) {
     if (!response.ok) {
         const error = new Error(`Error loading ${response.url}: status ${response.status}`);
-        error.reponse = reponse;
+        error.response = response;
         throw error;
     }
     switch(type) {
@@ -33,7 +33,8 @@ class FetchSource {
     }
 
     open(url, type) {
-        return this.fetch(this.path + url, this.fetchOptions)
+        if(!url.startsWith('http')) url = this.path + url; // todo: better handling of absolute and relative urls
+        return this.fetch(url, this.fetchOptions)
             .then(response => this.decode(response, type));
     }
 

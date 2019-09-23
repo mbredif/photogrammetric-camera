@@ -84,7 +84,7 @@ function parseDistortion(xml) {
     }
 }
 
-function parseIntrinsics(xml) {
+function parseIntrinsics(xml, imageMatrix) {
     if (!xml) {
         throw new Error('Error parsing micmac orientation, no intrinsics');
     }
@@ -107,7 +107,7 @@ function parseIntrinsics(xml) {
         .reverse(); // see the doc
     var near = focal.x * 0.035 / size.x; // horizontal focal length in meters, assuming a 35mm-wide sensor
     var far = 1000; // 1km
-    var camera = new PhotogrammetricCamera(focal, size, point, skew, distos, near, far);
+    var camera = new PhotogrammetricCamera(focal, size, point, skew, distos, near, far, undefined, imageMatrix);
     if (rmax) {
         camera.r2max = rmax * rmax;
     }
