@@ -53,7 +53,8 @@
             var THREE = ThreePhotogrammetricCamera.THREE;
             var PhotogrammetricCamera = ThreePhotogrammetricCamera.PhotogrammetricCamera;
             var MatisOrientationParser = ThreePhotogrammetricCamera.MatisOrientationParser;
-            var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
+						var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
+						var OPKOrientationParser = ThreePhotogrammetricCamera.OPKOrientationParser;
             var FetchSource = ThreePhotogrammetricCamera.FetchSource;
             var FilesSource = ThreePhotogrammetricCamera.FilesSource;
             var OrientedImageMaterial = ThreePhotogrammetricCamera.OrientedImageMaterial;
@@ -112,7 +113,7 @@
                     sizeAttenuation: false,
                     vertexColors: THREE.VertexColors,
                     blending: THREE.NormalBlending,
-                    color: 0xff0000,
+                    //color: 0xff0000,
                     transparent: true,
                 });
                 sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
@@ -210,36 +211,33 @@
                     };
                 }
 
-                function handleOrientation(name) {
+                function handleOrientation(camera) {
                     showHelp(false);
-                    return function(camera) {
-                        if (!camera) return;
-                        const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
-                        camera.name = match ? match[1] : name;
-                        if (cameras.children.find(cam => cam.name == camera.name)) {
-                            console.warn(`Camera "${camera.name}" was already loaded, skipping`);
-                            return;
-                        }
-                        var check = '[?]';
-                        if (camera.check) check = camera.check() ? '[Y]' : '[N]';
-                        console.log(check, name);
-                        camera.far = sphereRadius+epsilonRadius;
-                        camera.updateProjectionMatrix();
-                        if (useCustomCameraHelper) {
-                            // use our Camera Helper
-                            camera.add(cameraHelper(camera));
-                        } else {
-                            // use THREE.CameraHelper
-                            camera.near = 0.5;
-                            camera.far = 1;
-                            scene.add(new THREE.CameraHelper(camera));
-                        }
-                        cameras.add(camera);
-                        cameras.children.sort((a, b) => a.name.localeCompare(b.name));
-                        setCamera(camera);
-                        return camera;
-                    };
-                }
+                    if (!camera) return;
+										if (camera instanceof Array) return camera.map(handleOrientation);
+                    if (cameras.children.find(cam => cam.name == camera.name)) {
+                        console.warn(`Camera "${camera.name}" was already loaded, skipping`);
+                        return;
+                    }
+                    var check = '[?]';
+                    if (camera.check) check = camera.check() ? '[Y]' : '[N]';
+                    console.log(check, name);
+                    camera.far = sphereRadius+epsilonRadius;
+                    camera.updateProjectionMatrix();
+                    if (useCustomCameraHelper) {
+                        // use our Camera Helper
+                        camera.add(cameraHelper(camera));
+                    } else {
+                        // use THREE.CameraHelper
+                        camera.near = 0.5;
+                        camera.far = 1;
+                        scene.add(new THREE.CameraHelper(camera));
+                    }
+                    cameras.add(camera);
+                    cameras.children.sort((a, b) => a.name.localeCompare(b.name));
+                    setCamera(camera);
+                    return camera;
+                };
 
                 // parse functions
                 var plyLoader = new THREE.PLYLoader();
@@ -253,11 +251,11 @@
                     }
                 }
 
-                function parseOrientation(source) {
-                    var parsers = [MicmacOrientationParser, MatisOrientationParser];
+                function parseOrientation(source, name) {
+                    var parsers = [MicmacOrientationParser, MatisOrientationParser, OPKOrientationParser];
                     return (data) => {
                         for(const parser of parsers) {
-                            var parsed = parser.parse(data, source);
+                            var parsed = parser.parse(data, source, name);
                             if (parsed) return parsed;
                         }
                         return undefined;
@@ -280,8 +278,8 @@
 
                 function loadOrientation(name, source) {
                     return source.open(name, 'text')
-                        .then(parseOrientation(source))
-                        .then(handleOrientation(name));
+                        .then(parseOrientation(source, name))
+                        .then(handleOrientation);
                 }
 
                 function loadFileImSel(dir, source) {
@@ -485,6 +483,71 @@
                     Viabon: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
                     },
+										Alex: function() {
+											var source = new FetchSource('data/alex/');
+											const pixel = 0.004; // mm
+											const focal = 123.9/pixel; // mm
+											const size = [26460, 17004];
+											source.cameras = { "UCE-M3-f120" : new PhotogrammetricCamera(focal, size) };
+
+											const orientations = loadOrientation('20FUALPMAR_alt.OPK', source);
+											orientations.then(cameras => cameras.map(cam => loadImage(cam.name + '.jpg', source)));
+											sphere.visible = false;
+											orientations.then(cameras => {
+												plane.position.x = cameras[0].position.x;
+												plane.position.y = cameras[0].position.y;
+												plane.position.z = 0;
+												plane.updateMatrixWorld();
+												orbitControls.target.copy(plane.position);
+											});
+											const scale = 30000;
+											plane.scale.set(scale,scale,scale);
+
+											const mes = source.open('sample.MES', 'text').then(text => OPKOrientationParser.parseMES(text, 'sample.MES'));
+											const xyz = source.open('sample.XYZ', 'text').then(text => OPKOrientationParser.parseXYZ(text, 'sample.XYZ'));
+
+											xyz.then(data => {
+												const geometry = new THREE.BufferGeometry();
+												geometry.addAttribute('position', new THREE.BufferAttribute( data.position, 3 ));
+												const material = new THREE.PointsMaterial( { color: 0xff0000, size: 10} );
+												const gcp = new THREE.Points(geometry, material);
+												 scene.add(gcp);
+											});
+
+											Promise.all([xyz, orientations, mes]).then(res => {
+												var [x, o, m] = res;
+												const geometry = new THREE.BufferGeometry();
+												const position = new Float32Array( 3*o.length + x.position.length);
+												position.set(x.position, 3*o.length);
+												const cameraDict = {};
+												for(var c = 0; c < o.length; ++c) {
+													o[c].position.toArray(position, 3*c);
+													cameraDict[o[c].name] = c;
+												}
+												geometry.addAttribute('position', new THREE.BufferAttribute( position, 3 ));
+
+												const measureDict = {};
+												for(var i = 0; i< x.size; ++i)
+												{
+													measureDict[x.name[i]] = i + o.length;
+												}
+
+												const indices = [];
+												for(var i = 0; i< m.size; ++i)
+												{
+													const camera = cameraDict[m.image[i]];
+													const measure = measureDict[m.name[i]];
+													indices.push(camera, measure);
+												}
+												geometry.setIndex( indices );
+												geometry.computeBoundingSphere();
+
+												const material = new THREE.LineBasicMaterial( { color: 0xffff00, linewidth: 1} );
+												const lines = new THREE.LineSegments(geometry, material);
+												scene.add(lines);
+												lines.visible = false;
+											});
+										},
                 }
             }
 
@@ -525,7 +588,7 @@
                 backgroundGUI.add(textureMaterial, 'wireframe');
                 backgroundGUI.add(sphere, 'visible').name('sphere visible');
                 backgroundGUI.add(plane, 'visible').name('plane visible');
-                backgroundGUI.add(plane.position, 'z', -10, 100, 0.01).name('plane Z').listen();
+                backgroundGUI.add(plane.position, 'z', -10, 1000, 0.01).name('plane Z').listen();
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
                 gui.add(textureMaterial, 'diffuseColorGrey');

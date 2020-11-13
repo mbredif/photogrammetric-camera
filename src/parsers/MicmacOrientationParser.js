@@ -254,8 +254,9 @@ function parseCheck(xml) {
     return check;
 }
 
-function parseOrientation(xml, intrinsics) {
+function parseOrientation(xml, name, intrinsics) {
     var camera = parseIntrinsics(intrinsics, parseOrIntImaM2C(xml));
+		camera.name = name;
     camera.matrix = parseExtrinsics(xml);
     camera.matrix.decompose(camera.position, camera.quaternion, camera.scale);
     camera.updateMatrixWorld(true);
@@ -273,10 +274,13 @@ export default {
      * @return {Promise} - a promise that resolves with a camera.
      *
      */
-    parse: function parse(xml, source) {
+    parse: function parse(xml, source, name) {
         if (!(xml instanceof Node)) {
             xml = new window.DOMParser().parseFromString(xml, 'text/xml');
         }
+				const match = name.match(/Orientation-(.*)\.[\w\d]*\.xml/i);
+				if (match) name = match[1];
+
         // sanity check for format
         xml = xml.getElementsByTagName('OrientationConique')[0];
         if (!xml) return undefined;
@@ -289,10 +293,10 @@ export default {
         }
 
         if (file) {
-            return source.open(file, 'text').then(intrinsics => parseOrientation(xml, intrinsics));
+            return source.open(file, 'text').then(intrinsics => parseOrientation(xml, name, intrinsics));
         } else {
             var intrinsics = xml.getElementsByTagName('Interne')[0];
-            return Promise.resolve(parseOrientation(xml, intrinsics));
+            return Promise.resolve(parseOrientation(xml, name, intrinsics));
         }
     },
     format: 'micmac/orientation',

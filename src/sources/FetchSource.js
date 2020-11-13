@@ -4,7 +4,7 @@ const URL = window.URL || window.webkitURL;
 function decode(response, type) {
     if (!response.ok) {
         const error = new Error(`Error loading ${response.url}: status ${response.status}`);
-        error.reponse = reponse;
+        error.response = response;
         throw error;
     }
     switch(type) {
