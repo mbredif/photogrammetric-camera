@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
-        <title>THREE - Photogrammetric Camera</title>
+        <title>Photogrammetric Camera</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
         <style>
@@ -55,6 +55,7 @@
             var MatisOrientationParser = ThreePhotogrammetricCamera.MatisOrientationParser;
 						var MicmacOrientationParser = ThreePhotogrammetricCamera.MicmacOrientationParser;
 						var OPKOrientationParser = ThreePhotogrammetricCamera.OPKOrientationParser;
+						var BundlerOrientationParser = ThreePhotogrammetricCamera.BundlerOrientationParser;
             var FetchSource = ThreePhotogrammetricCamera.FetchSource;
             var FilesSource = ThreePhotogrammetricCamera.FilesSource;
             var OrientedImageMaterial = ThreePhotogrammetricCamera.OrientedImageMaterial;
@@ -214,7 +215,12 @@
                 function handleOrientation(camera) {
                     showHelp(false);
                     if (!camera) return;
-										if (camera instanceof Array) return camera.map(handleOrientation);
+					if (camera instanceof Array) {
+						const res = camera.map(handleOrientation);
+						res.points = camera.points;
+						res.colors = camera.colors;
+						return res;
+					}
                     if (cameras.children.find(cam => cam.name == camera.name)) {
                         console.warn(`Camera "${camera.name}" was already loaded, skipping`);
                         return;
@@ -252,7 +258,7 @@
                 }
 
                 function parseOrientation(source, name) {
-                    var parsers = [MicmacOrientationParser, MatisOrientationParser, OPKOrientationParser];
+                    var parsers = [MicmacOrientationParser, MatisOrientationParser, OPKOrientationParser, BundlerOrientationParser];
                     return (data) => {
                         for(const parser of parsers) {
                             var parsed = parser.parse(data, source, name);
@@ -270,10 +276,10 @@
                     .then(handlePly(url));
                 }
 
-                function loadImage(url, source) {
+                function loadImage(url, source, name) {
                     return source.open(url, 'dataURL')
                     .then(parseImage(source))
-                    .then(handleImage(url));
+                    .then(handleImage(name || url));
                 }
 
                 function loadOrientation(name, source) {
@@ -483,6 +489,27 @@
                     Viabon: function() {
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
                     },
+                    NotreDame: function() {
+					
+						var source = new FetchSource('data/NotreDame/');
+						const list = source.open('list2.txt', 'text');
+						const out  = source.open('notredame_cameras.out', 'text');
+						const orientations = Promise.all([list, out]).then(BundlerOrientationParser.parse).then(handleOrientation);
+						//orientations.then(cameras => cameras.map(cam => loadImage('images/rd/'+cam.name + '.rd.jpg', source, cam.name)));
+						orientations.then(cameras => cameras.map(cam => loadImage('images/'+cam.name + '.jpg', source, cam.name)));
+						orientations.then(cameras => {
+						console.log(cameras);
+							const geometry = new THREE.BufferGeometry();
+							geometry.addAttribute('position', new THREE.BufferAttribute( cameras.points, 3 ));
+							geometry.addAttribute('color', new THREE.BufferAttribute( cameras.colors, 3, true ));
+							geometry.computeBoundingSphere();
+							const material = textureMaterial; // new THREE.PointsMaterial( { size: 1, sizeAttenuation: false } );
+							const gcp = new THREE.Points(geometry, material);
+							scene.add(gcp);
+						})
+						plane.visible = false;
+						sphere.visible = false;
+                    },
 										Alex: function() {
 											var source = new FetchSource('data/alex/');
 											const pixel = 0.004; // mm
@@ -511,7 +538,7 @@
 												geometry.addAttribute('position', new THREE.BufferAttribute( data.position, 3 ));
 												const material = new THREE.PointsMaterial( { color: 0xff0000, size: 10} );
 												const gcp = new THREE.Points(geometry, material);
-												 scene.add(gcp);
+												scene.add(gcp);
 											});
 
 											Promise.all([xyz, orientations, mes]).then(res => {
