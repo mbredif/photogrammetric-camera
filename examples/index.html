@@ -59,6 +59,8 @@
             var FetchSource = ThreePhotogrammetricCamera.FetchSource;
             var FilesSource = ThreePhotogrammetricCamera.FilesSource;
             var OrientedImageMaterial = ThreePhotogrammetricCamera.OrientedImageMaterial;
+            var NewMaterial = ThreePhotogrammetricCamera.NewMaterial;
+            var ShadowMapMaterial = ThreePhotogrammetricCamera.ShadowMapMaterial;
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
@@ -66,7 +68,8 @@
         <script>
             var orbitTarget, orbitControls;
             var scene, renderer, plyGroup, cameras;
-            var textureMaterial, wireMaterial, viewMaterialOptions = {}, viewMaterials = {};
+            var textureMaterial, wireMaterial, pointsMaterial, shadowMapMaterial, viewMaterialOptions = {}, viewMaterials = {};
+            var viewShadowMaps = {};
             var textures = {};
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
@@ -98,6 +101,7 @@
                 scene.add(viewCamera);
                 var textureLoader = new THREE.TextureLoader();
                 const uvTexture = textureLoader.load('data/uv.jpg');
+                uvTexture.name = 'uvTexture';
 
                 // materials
                 wireMaterial = new THREE.MeshBasicMaterial( {color: 0x00ffff, wireframe: true} );
@@ -117,8 +121,18 @@
                     //color: 0xff0000,
                     transparent: true,
                 });
-                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
-                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), textureMaterial);
+
+                pointsMaterial = new NewMaterial({
+                  map: uvTexture,
+                });
+
+                shadowMapMaterial = new ShadowMapMaterial();
+
+
+                // sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
+                // plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), textureMaterial);
+                sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), shadowMapMaterial);
+                plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), shadowMapMaterial);
                 sphere.scale.set(sphereRadius, sphereRadius, sphereRadius);
                 viewCamera.add(sphere);
                 scene.add(plane);
@@ -190,7 +204,7 @@
                     showHelp(false);
                     return function(geometry) {
                         console.log(name);
-                        var points = new THREE.Points( geometry, textureMaterial );
+                        var points = new THREE.Points( geometry, shadowMapMaterial );
                         plyGroup.add( points );
                         geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
@@ -215,12 +229,12 @@
                 function handleOrientation(camera) {
                     showHelp(false);
                     if (!camera) return;
-					if (camera instanceof Array) {
-						const res = camera.map(handleOrientation);
-						res.points = camera.points;
-						res.colors = camera.colors;
-						return res;
-					}
+          					if (camera instanceof Array) {
+          						const res = camera.map(handleOrientation);
+          						res.points = camera.points;
+          						res.colors = camera.colors;
+          						return res;
+          					}
                     if (cameras.children.find(cam => cam.name == camera.name)) {
                         console.warn(`Camera "${camera.name}" was already loaded, skipping`);
                         return;
@@ -242,6 +256,12 @@
                     cameras.add(camera);
                     cameras.children.sort((a, b) => a.name.localeCompare(b.name));
                     setCamera(camera);
+
+                    viewShadowMaps[camera.name] = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RedFormat } );
+                    renderer.setRenderTarget(viewShadowMaps[camera.name]);
+                    renderer.render(scene, camera);
+                    renderer.setRenderTarget(null);
+
                     return camera;
                 };
 
@@ -381,6 +401,7 @@
                     console.log('Texture:', camera.name);
                     textureCamera = camera;
                     setMaterial(textureMaterial, camera);
+                    setMaterial(pointsMaterial, camera);
                 }
 
                 function setCamera(camera) {
@@ -490,25 +511,24 @@
                         loadJSON('http://mathieu.bredif.free.fr/cors.php?url=data/viabon/');
                     },
                     NotreDame: function() {
-					
-						var source = new FetchSource('data/NotreDame/');
-						const list = source.open('list2.txt', 'text');
-						const out  = source.open('notredame_cameras.out', 'text');
-						const orientations = Promise.all([list, out]).then(BundlerOrientationParser.parse).then(handleOrientation);
-						//orientations.then(cameras => cameras.map(cam => loadImage('images/rd/'+cam.name + '.rd.jpg', source, cam.name)));
-						orientations.then(cameras => cameras.map(cam => loadImage('images/'+cam.name + '.jpg', source, cam.name)));
-						orientations.then(cameras => {
-						console.log(cameras);
-							const geometry = new THREE.BufferGeometry();
-							geometry.addAttribute('position', new THREE.BufferAttribute( cameras.points, 3 ));
-							geometry.addAttribute('color', new THREE.BufferAttribute( cameras.colors, 3, true ));
-							geometry.computeBoundingSphere();
-							const material = textureMaterial; // new THREE.PointsMaterial( { size: 1, sizeAttenuation: false } );
-							const gcp = new THREE.Points(geometry, material);
-							scene.add(gcp);
-						})
-						plane.visible = false;
-						sphere.visible = false;
+            						var source = new FetchSource('data/NotreDame/');
+            						const list = source.open('list2.txt', 'text');
+            						const out  = source.open('notredame_cameras.out', 'text');
+            						const orientations = Promise.all([list, out]).then(BundlerOrientationParser.parse).then(handleOrientation);
+            						//orientations.then(cameras => cameras.map(cam => loadImage('images/rd/'+cam.name + '.rd.jpg', source, cam.name)));
+            						orientations.then(cameras => cameras.map(cam => loadImage('images/'+cam.name + '.jpg', source, cam.name)));
+            						orientations.then(cameras => {
+            						console.log(cameras);
+            							const geometry = new THREE.BufferGeometry();
+            							geometry.addAttribute('position', new THREE.BufferAttribute( cameras.points, 3 ));
+            							geometry.addAttribute('color', new THREE.BufferAttribute( cameras.colors, 3, true ));
+            							geometry.computeBoundingSphere();
+            							const material = textureMaterial; // new THREE.PointsMaterial( { size: 1, sizeAttenuation: false } );
+            							const gcp = new THREE.Points(geometry, material);
+            							scene.add(gcp);
+            						})
+            						plane.visible = false;
+            						sphere.visible = false;
                     },
 										Alex: function() {
 											var source = new FetchSource('data/alex/');
@@ -618,7 +638,7 @@
                 backgroundGUI.add(plane.position, 'z', -10, 1000, 0.01).name('plane Z').listen();
 
                 gui.add(textureMaterial, 'borderSharpness', 2, 200);
-                gui.add(textureMaterial, 'diffuseColorGrey');
+                gui.add(pointsMaterial, 'diffuseColorGrey');
                 gui.add(textureMaterial, 'debugOpacity', 0, 1);
 
                 return gui;
