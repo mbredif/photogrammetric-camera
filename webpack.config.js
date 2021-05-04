@@ -11,6 +11,14 @@ module.exports = {
         library: 'ThreePhotogrammetricCamera',
         libraryTarget: 'umd'
     },
+    module: {
+        rules: [
+            {
+                test: /\.glsl$/,
+                loader: 'webpack-glsl-loader'
+            }
+        ]
+    },
   devServer: {
     publicPath: '/dist/'
   },
