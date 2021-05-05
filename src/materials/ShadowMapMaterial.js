@@ -31,6 +31,7 @@ class ShadowMapMaterial extends ShaderMaterial {
     //     }
     // `;
     this.fragmentShader = ShadowMapMaterialFS;
+    this.uniforms.size = new Uniform(3);
   }
 }
 

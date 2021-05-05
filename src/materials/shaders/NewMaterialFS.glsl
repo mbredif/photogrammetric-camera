@@ -6,15 +6,20 @@ uniform mat4 textureCameraPreTransform; // Contains the rotation and the intrins
 uniform mat4 textureCameraPostTransform;
 uniform RadialDistortion uvDistortion;
 varying vec4 vPositionWorld;
-varying float vDistanceCamera;
+varying vec4 vPositionImage;
 uniform sampler2D map;
 uniform sampler2D depthMap;
 #endif
+
+
+
+
 
 varying vec4 vColor;
 
 void main() {
   vec4 finalColor = vColor;
+
 
   if (diffuseColorGrey) {
     finalColor.rgb = vec3(dot(vColor.rgb, vec3(0.333333)));
@@ -28,23 +33,25 @@ void main() {
   // P : vPositionWorld
   // C': textureCameraPosition
 
-
-  vec4 uvw = textureCameraPreTransform * ( vPositionWorld - vec4(textureCameraPosition, 0.0) );
-
+  vec4 uvw = textureCameraPreTransform * ( vPositionWorld/vPositionWorld.w - vec4(textureCameraPosition, 0.0) );
 
   // For the shadowMapping, which is not distorted
   vec4 uvwNotDistorted = textureCameraPostTransform * uvw;
   uvwNotDistorted.xyz /= uvwNotDistorted.w;
   uvwNotDistorted.xyz = ( uvwNotDistorted.xyz + vec3(1.0) ) / 2.0;
-  vec4 minDist4D = texture2D(depthMap, uvwNotDistorted.xy);
-  float minDist = minDist4D.r;
 
-  // ShadowMapping
-  if ( (vDistanceCamera >= (minDist - EPSILON)) && (vDistanceCamera <= (minDist + EPSILON)) ) {
+	float minDist = texture2D(depthMap, uvwNotDistorted.xy).r;
+	float distanceCamera = uvwNotDistorted.z;
 
+	//finalColor = vec4(fract(uvwNotDistorted.xyz),1.);
+	//finalColor.z = minDist;
+
+
+	// ShadowMapping
+  if (  distanceCamera <= minDist + EPSILON ) {
     // Don't texture if uvw.w < 0
     if (uvw.w > 0. && distort_radial(uvw, uvDistortion)) {
-
+;
       uvw = textureCameraPostTransform * uvw;
       uvw.xyz /= uvw.w;
 
@@ -62,10 +69,7 @@ void main() {
     }
   }
 
-  // if (minDist == 0.) {
-  //   finalColor = vec4(1.,0.,0.,1.);
-  // }
 #endif
 
-  gl_FragColor = finalColor;
+  gl_FragColor =  finalColor;
 }

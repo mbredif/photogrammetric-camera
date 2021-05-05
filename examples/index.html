@@ -69,8 +69,7 @@
             var orbitTarget, orbitControls;
             var scene, renderer, plyGroup, cameras;
             var textureMaterial, wireMaterial, pointsMaterial, shadowMapMaterial, viewMaterialOptions = {}, viewMaterials = {};
-            var viewDepthMaps = {};
-            var textures = {};
+            var textures = {}, uvTexture;
             var prevCamera = new PhotogrammetricCamera();
             var viewCamera = new PhotogrammetricCamera();
             var nextCamera = new PhotogrammetricCamera();
@@ -100,7 +99,7 @@
                 scene.add(cameras);
                 scene.add(viewCamera);
                 var textureLoader = new THREE.TextureLoader();
-                const uvTexture = textureLoader.load('data/uv.jpg');
+                uvTexture = textureLoader.load('data/uv.jpg');
                 uvTexture.name = 'uvTexture';
 
                 // materials
@@ -126,13 +125,12 @@
                   map: uvTexture,
                 });
 
-                shadowMapMaterial = new ShadowMapMaterial();
+								shadowMapMaterial = new ShadowMapMaterial();
+//								shadowMapMaterial = new THREE.MeshDepthMaterial();
 
 
                 sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), pointsMaterial);
                 plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), pointsMaterial);
-                // sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), shadowMapMaterial);
-                // plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000, 1000, 100, 100), shadowMapMaterial);
                 sphere.scale.set(sphereRadius, sphereRadius, sphereRadius);
                 viewCamera.add(sphere);
                 scene.add(plane);
@@ -205,7 +203,7 @@
                     return function(geometry) {
                         console.log(name);
                         var points = new THREE.Points( geometry, pointsMaterial );
-                        plyGroup.add( points );
+												plyGroup.add( points );
                         geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
                         geometry.boundingBox.getCenter(center);
@@ -235,13 +233,18 @@
           						res.colors = camera.colors;
           						return res;
           					}
-                    if (cameras.children.find(cam => cam.name == camera.name)) {
+										if (cameras.children.find(cam => cam.name == camera.name)) {
                         console.warn(`Camera "${camera.name}" was already loaded, skipping`);
                         return;
                     }
                     var check = '[?]';
                     if (camera.check) check = camera.check() ? '[Y]' : '[N]';
                     console.log(check, name);
+
+										camera.depthTarget = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RedFormat } );
+
+										camera.near = 1;
+										camera.far = 100;
                     camera.far = sphereRadius+epsilonRadius;
                     camera.updateProjectionMatrix();
                     if (useCustomCameraHelper) {
@@ -249,28 +252,11 @@
                         camera.add(cameraHelper(camera));
                     } else {
                         // use THREE.CameraHelper
-                        camera.near = 0.5;
-                        camera.far = 1;
                         scene.add(new THREE.CameraHelper(camera));
                     }
                     cameras.add(camera);
                     cameras.children.sort((a, b) => a.name.localeCompare(b.name));
                     setCamera(camera);
-
-
-                    // Create the depthMaps for shadowMapping later
-                    plane.material = shadowMapMaterial;
-                    sphere.material = shadowMapMaterial;
-                    plyGroup.material = shadowMapMaterial;
-
-                    viewDepthMaps[camera.name] = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RedFormat } );
-                    renderer.setRenderTarget(viewDepthMaps[camera.name]);
-                    renderer.render(scene, camera);
-                    renderer.setRenderTarget(null);
-
-                    plane.material = pointsMaterial;
-                    sphere.material = pointsMaterial;
-                    plyGroup.material = pointsMaterial;
 
                     return camera;
                 };
@@ -394,9 +380,7 @@
                 }
 
                 function setDepthMap(material, camera) {
-                  var renderTgt = viewDepthMaps[camera.name] || null;
-                  if (renderTgt)
-                    material.depthMap = renderTgt.texture;
+                    material.depthMap = camera.depthTarget ? camera.depthTarget.texture : undefined;
                 }
 
                 /* Keyboard events */
@@ -662,7 +646,23 @@
             }
 
             function render() {
-                renderer.render(scene, viewCamera);
+							  if (textureCamera.depthTarget) {// Create the depthMaps for shadowMapping later
+	                plane.material = shadowMapMaterial;
+	                sphere.material = shadowMapMaterial;
+	                plyGroup.children.forEach(points => points.material = shadowMapMaterial);
+
+									renderer.setRenderTarget(textureCamera.depthTarget);
+	                renderer.render(scene, textureCamera);
+									pointsMaterial.depthMap = textureCamera.depthTarget.texture;
+									// pointsMaterial.depthMap = uvTexture;
+
+	                plane.material = pointsMaterial;
+	                sphere.material = pointsMaterial;
+	                plyGroup.children.forEach(points => points.material = pointsMaterial);
+								}
+
+								renderer.setRenderTarget(null);
+								renderer.render(scene, viewCamera);
             }
 
             var todoTimestamp = 0;
