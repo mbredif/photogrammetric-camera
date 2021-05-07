@@ -11,3 +11,4 @@ export { default as FetchSource } from './sources/FetchSource';
 export { default as OrientedImageMaterial } from './materials/OrientedImageMaterial';
 export { default as NewMaterial } from './materials/NewMaterial';
 export { default as ShadowMapMaterial } from './materials/ShadowMapMaterial';
+export { default as DepthMapViewer } from './utils/DepthMapViewer';

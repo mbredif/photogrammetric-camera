@@ -12,9 +12,6 @@ uniform sampler2D depthMap;
 #endif
 
 
-
-
-
 varying vec4 vColor;
 
 void main() {
@@ -40,7 +37,7 @@ void main() {
   uvwNotDistorted.xyz /= uvwNotDistorted.w;
   uvwNotDistorted.xyz = ( uvwNotDistorted.xyz + vec3(1.0) ) / 2.0;
 
-	float minDist = texture2D(depthMap, uvwNotDistorted.xy).r;
+	float minDist = unpackRGBAToDepth(texture2D(depthMap, uvwNotDistorted.xy));
 	float distanceCamera = uvwNotDistorted.z;
 
 	//finalColor = vec4(fract(uvwNotDistorted.xyz),1.);
@@ -51,7 +48,7 @@ void main() {
   if (  distanceCamera <= minDist + EPSILON ) {
     // Don't texture if uvw.w < 0
     if (uvw.w > 0. && distort_radial(uvw, uvDistortion)) {
-;
+
       uvw = textureCameraPostTransform * uvw;
       uvw.xyz /= uvw.w;
 
@@ -71,5 +68,6 @@ void main() {
 
 #endif
 
+  finalColor = vec4(vec2(uvwNotDistorted.x), 0., 1.0);
   gl_FragColor =  finalColor;
 }

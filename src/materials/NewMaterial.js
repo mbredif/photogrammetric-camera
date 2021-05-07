@@ -1,4 +1,4 @@
-import { Uniform, ShaderMaterial, Matrix4, Vector3, Vector4 } from 'three';
+import { Uniform, ShaderMaterial, ShaderChunk, Matrix4, Vector3, Vector4 } from 'three';
 import { default as RadialDistortion } from '../cameras/distortions/RadialDistortion';
 import NewMaterialVS from './shaders/NewMaterialVS.glsl';
 import NewMaterialFS from './shaders/NewMaterialFS.glsl';
@@ -53,99 +53,13 @@ class NewMaterial extends ShaderMaterial {
     definePropertyUniform(this, 'diffuseColorGrey', diffuseColorGrey);
 
     this.vertexShader = NewMaterialVS;
-//     this.vertexShader = `
-//         uniform float size;
-// #ifdef USE_PROJECTIVE_TEXTURING
-//         varying vec4 vPositionWorld;
-//         varying float vDistanceCamera;
-// #endif
-//         varying vec4 vColor;
-//
-//         void main() {
-//             gl_PointSize = size;
-//             vec4 vPositionImage = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-//             gl_Position = vPositionImage;
-//
-// #ifdef USE_PROJECTIVE_TEXTURING
-//             vPositionWorld = modelMatrix * vec4( position, 1.0 );
-//             vDistanceCamera = ((vPositionImage.z / vPositionImage.w) + 1.) / 2.;
-// #endif
-//             vColor = vec4(color, 1.);
-//         }
-//     `;
 
     this.fragmentShader = `
     ${RadialDistortion.chunks.radial_pars_fragment}
+    ${ShaderChunk.packing}
     ${NewMaterialFS}
     `;
-//     this.fragmentShader = `
-//     ${RadialDistortion.chunks.radial_pars_fragment}
-//         uniform bool diffuseColorGrey;
-// #ifdef USE_PROJECTIVE_TEXTURING
-//         uniform vec3 textureCameraPosition;
-//         uniform mat4 textureCameraPreTransform; // Contains the rotation and the intrinsics of the camera, but not the translation
-//         uniform mat4 textureCameraPostTransform;
-//         uniform RadialDistortion uvDistortion;
-//         varying vec4 vPositionWorld;
-//         varying float vDistanceCamera;
-//         uniform sampler2D map;
-//         uniform sampler2D depthMap;
-// #endif
-//         varying vec4 vColor;
-//
-//         void main() {
-//           vec4 finalColor = vColor;
-//
-//           if (diffuseColorGrey) {
-//             finalColor.rgb = vec3(dot(vColor.rgb, vec3(0.333333)));
-//           }
-//
-// #ifdef USE_PROJECTIVE_TEXTURING
-//         // Project the point in the texture image
-//         // p' = M' * (P - C')
-//         // p': uvw
-//         // M': textureCameraPreTransform
-//         // P : vPositionWorld
-//         // C': textureCameraPosition
-//
-//
-//         vec4 uvw = textureCameraPreTransform * ( vPositionWorld - vec4(textureCameraPosition, 0.0) );
-//
-//
-//         // For the shadowMapping, which is not distorted
-//         vec4 uvwNotDistorted = textureCameraPostTransform * uvw;
-//         uvwNotDistorted.xyz /= uvwNotDistorted.w;
-//         uvwNotDistorted.xyz = ( uvwNotDistorted.xyz + vec3(1.0) ) / 2.0;
-//         float minDist = texture2D(depthMap, uvwNotDistorted.xy);
-//
-//         // ShadowMapping
-//         if ( (vDistanceCamera >= (minDist - EPSILON)) && (vDistanceCamera <= (minDist + EPSILON)) ) {
-//
-//           // Don't texture if uvw.w < 0
-//           if (uvw.w > 0. && distort_radial(uvw, uvDistortion)) {
-//
-//             uvw = textureCameraPostTransform * uvw;
-//             uvw.xyz /= uvw.w;
-//
-//             // Normalization
-//             uvw.xyz = (uvw.xyz + vec3(1.0)) / 2.0;
-//
-//             // If coordinates are valid, they will be between 0 and 1 after normalization
-//             // Test if coordinates are valid, so we can texture
-//             vec3 testBorder = min(uvw.xyz, 1. - uvw.xyz);
-//
-//             if (all(greaterThan(testBorder,vec3(0.)))) {
-//               vec4 color = texture2D(map, uvw.xy);
-//               finalColor.rgb = mix(finalColor.rgb, color.rgb, color.a);
-//             }
-//           }
-//         }
-// #endif
-//
-//           gl_FragColor = finalColor;
-//         }
-//
-//     `;
+
   }
 
   setCamera(camera) {
@@ -154,6 +68,8 @@ class NewMaterial extends ShaderMaterial {
       this.textureCameraPreTransform.setPosition({x:0,y:0,z:0});
       this.textureCameraPreTransform.premultiply(camera.preProjectionMatrix);
       this.textureCameraPostTransform.copy(camera.postProjectionMatrix);
+
+      console.log('preTransform:\n', this.textureCameraPreTransform);
 
       if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
           this.uvDistortion = camera.distos[0];
