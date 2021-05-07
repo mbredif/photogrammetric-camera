@@ -192,7 +192,8 @@
                         viewMaterials[camera.name] = new OrientedImageMaterial(viewMaterialOptions);
                         viewMaterials[camera.name].map = textures[camera.name] || uvTexture;
                         var mesh = new THREE.Mesh( geometry, [wireMaterial, viewMaterials[camera.name]] );
-                        mesh.scale.set(10, 10, 10);
+                        //mesh.scale.set(10, 10, 10);
+                        mesh.scale.set(1.01, 1.01, 1.01); // push frustum base 1% away from the near plane
                         group.add(mesh);
                     }
 
@@ -254,7 +255,6 @@
 										camera.depthTarget = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight );
 
 										camera.near = 1;
-										camera.far = 100;
                     camera.far = sphereRadius+epsilonRadius;
                     camera.updateProjectionMatrix();
                     if (useCustomCameraHelper) {
@@ -665,14 +665,20 @@
 	                sphere.material = shadowMapMaterial;
 	                plyGroup.children.forEach(points => points.material = shadowMapMaterial);
 
+                  // Make cameraHelpers invisible for the depth map Rendering
+                  var camerasVisible = cameras.visible;
+                  cameras.visible = false;
+
 									renderer.setRenderTarget(textureCamera.depthTarget);
 	                renderer.render(scene, textureCamera);
 									pointsMaterial.depthMap = textureCamera.depthTarget.texture;
 								  //pointsMaterial.depthMap = uvTexture;
-                //
-	                plane.material = textureMaterial;
-	                sphere.material = textureMaterial;
-	                plyGroup.children.forEach(points => points.material = textureMaterial);
+
+                  cameras.visible = camerasVisible;
+
+	                plane.material = pointsMaterial;
+	                sphere.material = pointsMaterial;
+	                plyGroup.children.forEach(points => points.material = pointsMaterial);
 							 }
 
 								renderer.setRenderTarget(null);

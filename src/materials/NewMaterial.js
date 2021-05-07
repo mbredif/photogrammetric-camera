@@ -65,11 +65,9 @@ class NewMaterial extends ShaderMaterial {
   setCamera(camera) {
       camera.getWorldPosition(this.textureCameraPosition);
       this.textureCameraPreTransform.copy(camera.matrixWorldInverse);
-      this.textureCameraPreTransform.setPosition({x:0,y:0,z:0});
+      this.textureCameraPreTransform.setPosition(0,0,0);
       this.textureCameraPreTransform.premultiply(camera.preProjectionMatrix);
       this.textureCameraPostTransform.copy(camera.postProjectionMatrix);
-
-      console.log('preTransform:\n', this.textureCameraPreTransform);
 
       if (camera.distos && camera.distos.length == 1 && camera.distos[0].type === 'ModRad') {
           this.uvDistortion = camera.distos[0];
