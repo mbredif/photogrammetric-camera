@@ -132,7 +132,7 @@ class OrientedImageMaterial extends ShaderMaterial {
     setCamera(camera) {
         camera.getWorldPosition(this.uvwPosition);
         this.uvwPreTransform.copy(camera.matrixWorldInverse);
-        this.uvwPreTransform.setPosition(0,0,0);
+        this.uvwPreTransform.setPosition(0, 0, 0);
         this.uvwPreTransform.premultiply(camera.preProjectionMatrix);
         this.uvwPostTransform.copy(camera.postProjectionMatrix);
 

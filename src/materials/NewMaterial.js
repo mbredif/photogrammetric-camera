@@ -59,13 +59,13 @@ class NewMaterial extends ShaderMaterial {
     ${ShaderChunk.packing}
     ${NewMaterialFS}
     `;
-
+    
   }
 
   setCamera(camera) {
       camera.getWorldPosition(this.textureCameraPosition);
       this.textureCameraPreTransform.copy(camera.matrixWorldInverse);
-      this.textureCameraPreTransform.setPosition(0,0,0);
+      this.textureCameraPreTransform.setPosition(0, 0, 0);
       this.textureCameraPreTransform.premultiply(camera.preProjectionMatrix);
       this.textureCameraPostTransform.copy(camera.postProjectionMatrix);
 

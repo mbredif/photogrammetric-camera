@@ -4,7 +4,6 @@ import ShadowMapMaterialFS from './shaders/ShadowMapMaterialFS.glsl';
 
 class ShadowMapMaterial extends ShaderMaterial {
   constructor() {
-
     super();
 
     this.uniforms.size = new Uniform(3);

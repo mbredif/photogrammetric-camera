@@ -11,12 +11,10 @@ uniform sampler2D map;
 uniform sampler2D depthMap;
 #endif
 
-
 varying vec4 vColor;
 
 void main() {
   vec4 finalColor = vColor;
-
 
   if (diffuseColorGrey) {
     finalColor.rgb = vec3(dot(vColor.rgb, vec3(0.333333)));
@@ -43,9 +41,9 @@ void main() {
   vec3 testBorderNotDistorted = min(uvwNotDistorted.xyz, 1. - uvwNotDistorted.xyz);
 
 	// ShadowMapping
-   if ( all(greaterThan(testBorderNotDistorted,vec3(0.))) && distanceCamera <= minDist + EPSILON ) {
+  if ( all(greaterThan(testBorderNotDistorted,vec3(0.))) && distanceCamera <= minDist + EPSILON ) {
 
-    // Don't texture if uvw.w < 0
+	// Don't texture if uvw.w < 0
     if (uvw.w > 0. && distort_radial(uvw, uvDistortion)) {
 
       uvw = textureCameraPostTransform * uvw;
@@ -66,6 +64,8 @@ void main() {
         finalColor.rgb = vec3(0.2);
       }
     }
+  } else {
+	finalColor.rgb = vec3(0.2); // shadow color
   }
 
 #endif
