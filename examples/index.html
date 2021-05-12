@@ -62,6 +62,7 @@
             var NewMaterial = ThreePhotogrammetricCamera.NewMaterial;
             var ShadowMapMaterial = ThreePhotogrammetricCamera.ShadowMapMaterial;
             var DepthMapViewer = ThreePhotogrammetricCamera.DepthMapViewer;
+            var SpriteMaterial = ThreePhotogrammetricCamera.SpriteMaterial;
         </script>
         <script src="js/dat.gui.min.js"></script>
         <script src="js/PLYLoader.js"></script>
@@ -138,6 +139,8 @@
 
 //              shadowMapMaterial = new ShadowMapMaterial();
 //              shadowMapMaterial = new THREE.MeshDepthMaterial();
+
+                pointsMaterial = new SpriteMaterial();
 
 
                 sphere = new THREE.Mesh(new THREE.SphereBufferGeometry(-1, 32, 32), textureMaterial);
@@ -233,7 +236,7 @@
                     showHelp(false);
                     return function(geometry) {
                         console.log(name);
-                        var points = new THREE.Points( geometry, textureMaterial );
+                        var points = new THREE.Points( geometry, pointsMaterial );
                         plyGroup.add( points );
                         geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
@@ -420,6 +423,7 @@
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
                     orbitControls.enabled = false;
+                    pointsMaterial.setViewCamera(camera);
                 }
 
                 function setTexture(camera) {
@@ -454,6 +458,8 @@
 
                     renderer.setRenderTarget(null);
                     textureMaterial.depthMap = renderTarget.depthTexture;
+
+                    setMaterial(pointsMaterial, textureCamera);
                 }
 
                 function setCamera(camera) {

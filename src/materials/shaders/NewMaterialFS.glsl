@@ -68,7 +68,7 @@ void main() {
       }
     }
   } else {
-	 finalColor.rgb = vec3(0.2); // shadow color
+	   finalColor.rgb = vec3(0.2); // shadow color
   }
 
 #endif
