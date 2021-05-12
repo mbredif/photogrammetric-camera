@@ -17,7 +17,7 @@ function definePropertyUniform(object, property, defaultValue) {
 }
 
 // M^(-1) -> this.viewProjectionInverse
-// C -> this.viewCameraPosition
+// C -> uniform vec3 cameraPosition
 // M' -> this.textureCameraPostTransform * this.textureCameraPreTransform
 // C' -> this.textureCameraPosition
 // P -> attribute vec3 position;
@@ -30,7 +30,6 @@ class SpriteMaterial extends ShaderMaterial {
     definePropertyUniform(this, 'textureCameraPosition', new Vector3());
     definePropertyUniform(this, 'textureCameraPreTransform', new Matrix4());
     definePropertyUniform(this, 'textureCameraPostTransform', new Matrix4());
-    definePropertyUniform(this, 'viewCameraPosition', new Vector3());
     definePropertyUniform(this, 'viewProjectionInverse', new Matrix4());
     definePropertyUniform(this, 'uvDistortion', {R: new Vector4(), C: new Vector3()});
     definePropertyUniform(this, 'map', null);
@@ -60,8 +59,6 @@ class SpriteMaterial extends ShaderMaterial {
   }
 
   setViewCamera(camera) {
-    camera.getWorldPosition(this.viewCameraPosition);
-
     var viewProjectionTransform = new Matrix4();
     viewProjectionTransform.copy(camera.matrixWorldInverse);
     viewProjectionTransform.setPosition(0, 0, 0);

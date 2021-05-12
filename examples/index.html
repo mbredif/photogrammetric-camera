@@ -423,7 +423,6 @@
                     nextCamera.zoom = viewCamera.zoom; // keep the current zoom
                     onWindowResize();
                     orbitControls.enabled = false;
-                    pointsMaterial.setViewCamera(camera);
                 }
 
                 function setTexture(camera) {
@@ -740,6 +739,7 @@
                 if (viewMaterials[nextCamera.name])
                     viewMaterials[nextCamera.name].setValues(viewMaterialOptions);
 
+                pointsMaterial.setViewCamera(viewCamera);
                 render();
             }
 
