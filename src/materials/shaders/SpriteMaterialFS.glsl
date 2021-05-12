@@ -1,7 +1,7 @@
 uniform bool diffuseColorGrey;
 uniform sampler2D map;
 uniform sampler2D depthMap;
-varying mat4 vH;
+varying mat3 vH;
 varying vec4 vColor;
 
 void main() {
@@ -12,9 +12,9 @@ void main() {
   }
 
   // p_texture = H * p_screen
-  vec4 texCoord = vH * gl_FragCoord;
-  texCoord.xyz /= texCoord.w;
-  texCoord.xyz = ( texCoord.xyz + 1.0 ) / 2.0;
+  vec3 texCoord = vH * gl_FragCoord.xyw;
+  texCoord /= texCoord.z;
+  texCoord = ( texCoord + 1.0 ) / 2.0;
 
   // TODO: add the shadowMapping
   // vec4 uvw = textureCameraPreTransform * vec4( vPositionWorld.xyz/vPositionWorld.w - textureCameraPosition, 1.0);
@@ -61,7 +61,15 @@ void main() {
   // }
 
   finalColor = texture2D(map, texCoord.xy);
-  //finalColor = vec4(1.,0.,0.,1.);
+
+  // vec3 testBorder = min(texCoord.xyz, 1. - texCoord.xyz);
+  // if (all(greaterThan(testBorder,vec3(0.)))) {
+  //   finalColor = vec4(0.,1.,0.,1.);
+  // } else {
+  //   finalColor = vec4(1.,0.,0.,1.);
+  // }
+  //
+  // finalColor = vec4(texCoord.x - 1.,texCoord.y - 1.,texCoord.z - 1.,1.);
 
 
   gl_FragColor =  finalColor;

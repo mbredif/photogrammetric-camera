@@ -1,4 +1,4 @@
-import { Uniform, ShaderMaterial, Vector3, Vector4, Matrix4 } from 'three';
+import { Uniform, ShaderMaterial, Vector3, Vector4, Matrix3, Matrix4 } from 'three';
 import SpriteMaterialVS from './shaders/SpriteMaterialVS.glsl';
 import SpriteMaterialFS from './shaders/SpriteMaterialFS.glsl';
 
@@ -30,7 +30,7 @@ class SpriteMaterial extends ShaderMaterial {
     definePropertyUniform(this, 'textureCameraPosition', new Vector3());
     definePropertyUniform(this, 'textureCameraPreTransform', new Matrix4());
     definePropertyUniform(this, 'textureCameraPostTransform', new Matrix4());
-    definePropertyUniform(this, 'viewProjectionInverse', new Matrix4());
+    definePropertyUniform(this, 'viewProjectionInverse', new Matrix3());
     definePropertyUniform(this, 'uvDistortion', {R: new Vector4(), C: new Vector3()});
     definePropertyUniform(this, 'map', null);
     definePropertyUniform(this, 'depthMap', null);
@@ -59,11 +59,17 @@ class SpriteMaterial extends ShaderMaterial {
   }
 
   setViewCamera(camera) {
-    var viewProjectionTransform = new Matrix4();
-    viewProjectionTransform.copy(camera.matrixWorldInverse);
-    viewProjectionTransform.setPosition(0, 0, 0);
-    viewProjectionTransform.premultiply(camera.preProjectionMatrix);
-    viewProjectionTransform.premultiply(camera.postProjectionMatrix);
+    var viewProjectionTransformMat4 = new Matrix4();
+    viewProjectionTransformMat4.copy(camera.matrixWorldInverse);
+    viewProjectionTransformMat4.setPosition(0, 0, 0);
+    viewProjectionTransformMat4.premultiply(camera.preProjectionMatrix);
+    viewProjectionTransformMat4.premultiply(camera.postProjectionMatrix);
+
+    var viewProjectionTransform = new Matrix3();
+    var els = viewProjectionTransformMat4.elements;
+    viewProjectionTransform.set(els[0], els[4], els[8],
+                                els[1], els[5], els[9],
+                                els[3], els[7], els[11]);
 
     this.viewProjectionInverse.copy(viewProjectionTransform).invert();
   }

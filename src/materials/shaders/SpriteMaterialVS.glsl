@@ -10,8 +10,8 @@ varying vec4 vColor;
 uniform vec3 textureCameraPosition;
 uniform mat4 textureCameraPreTransform; // Contains the rotation and the intrinsics of the camera, but not the translation
 uniform mat4 textureCameraPostTransform;
-uniform mat4 viewProjectionInverse;
-varying mat4 vH;
+uniform mat3 viewProjectionInverse;
+varying mat3 vH;
 
 void main() {
     gl_PointSize = size;
@@ -19,9 +19,13 @@ void main() {
 
     // Homography
 
-    mat4 M_prime = textureCameraPostTransform * textureCameraPreTransform;
-    vec4 E_prime = M_prime * vec4(cameraPosition - textureCameraPosition, 1.0);
-    E_prime.xyz /= E_prime.w;
+    mat4 M_prime_mat4 = textureCameraPostTransform * textureCameraPreTransform;
+    mat3 M_prime = mat3(M_prime_mat4[0][0], M_prime_mat4[0][1], M_prime_mat4[0][2],
+                        M_prime_mat4[1][0], M_prime_mat4[1][1], M_prime_mat4[1][2],
+                        M_prime_mat4[3][0], M_prime_mat4[3][1], M_prime_mat4[3][2]);
+
+    vec3 E_prime = M_prime * (cameraPosition - textureCameraPosition);
+
     vec4 P = modelMatrix * vec4( position, 1.0 );
     P.xyz /= P.w;
     vec3 N = P.xyz - cameraPosition;
@@ -39,12 +43,7 @@ void main() {
 
     mat3 fraction = ( 1.0 / denominator ) * numerator;
 
-
-    // TODO: find another way to do this if possible
-    M_prime[0][0] += fraction[0][0]; M_prime[0][1] += fraction[0][1]; M_prime[0][2] += fraction[0][2];
-    M_prime[1][0] += fraction[1][0]; M_prime[1][1] += fraction[1][1]; M_prime[1][2] += fraction[1][2];
-    M_prime[2][0] += fraction[2][0]; M_prime[2][1] += fraction[2][1]; M_prime[2][2] += fraction[2][2];
-
+    M_prime += fraction;
 
     vH = M_prime * viewProjectionInverse;
 
